@@ -43,7 +43,7 @@ while (<>) {
         next;
     }
 
-    if (/plural of\|(\w+)\|/) {
+    if (/plural of\|(\w+)\|lang=en/) {
         $plural_of = lc($1);
     }
     
@@ -56,7 +56,7 @@ if ($word && ($good || $whitelist{$word})) {
     $plural{$word} = $plural_of if $plural_of;
 }
 
-print STDERR Dumper(\%plural);
+# print STDERR Dumper(\%plural);
 
 # Now remove any plurals whose base word we rejected
 # This can happen for example with an initialism where the base

@@ -7,7 +7,7 @@
 # Outputs a list of words 3-7 characters long sorted by word length
 #
 
-pigz -d -c *pages-articles.xml.gz | ./parse.pl | \
+time pv *pages-articles.xml.gz | pigz -d -c | ./parse.pl | \
 #./parse.pl t.fil | \
 grep '^[A-Za-z]*$' | tr '[A-Z]' '[a-z]' | \
 sort | uniq | \

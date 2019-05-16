@@ -5,14 +5,12 @@ import (
     "fmt"
     "log"
     "bufio"
-    //"runtime"
     "os"
     "time"
     "net/http"
     "net/url"
     "strings"
     "encoding/json"
-    //"io"
 )
 
 var flagServeHTTP bool
@@ -88,13 +86,6 @@ func search(w http.ResponseWriter, req *http.Request) {
     for _, l := range letters {
         letterTab[l]++
     }
-
-    /*
-    for _, word := range findWords(letterTab, wordList, template, letters) {
-        //fmt.Fprintf(w, "%v\n", word)
-        fmt.Fprintf(w, "%v\n", word)
-    }
-    */
 
     json.NewEncoder(w).Encode(findWords(letterTab, wordList, template, letters))
 
