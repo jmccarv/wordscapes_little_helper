@@ -11,23 +11,29 @@ import (
     "sort"
     "strings"
     "flag"
+    //"log"
 )
 
-var minWordLength int
-var maxWordLength int
+var minWordLength    int
+var maxWordLength    int
+var includeMixedCase bool
 
 func init() {
     const (
         defaultMinLength = 1
         defaultMaxLength = 0
+        defaultIncludeMixedCase = false
         minLengthUsage = "Minimum length word to output"
         maxLengthUsage = "Maximum length word to output (default 0 - no maximum)"
+        includeMixedCaseUsage = "Include words with upper case letters"
     )
 
     flag.IntVar(&minWordLength, "min-length", defaultMinLength, minLengthUsage)
     flag.IntVar(&minWordLength, "m", defaultMinLength, minLengthUsage+" (short)")
     flag.IntVar(&maxWordLength, "max-length", defaultMaxLength, maxLengthUsage)
     flag.IntVar(&maxWordLength, "l", defaultMaxLength, maxLengthUsage+" (short)")
+    flag.BoolVar(&includeMixedCase, "mixed-case", defaultIncludeMixedCase, includeMixedCaseUsage)
+    flag.BoolVar(&includeMixedCase, "i", defaultIncludeMixedCase, includeMixedCaseUsage+" (short)")
 }
 
 type Revision struct {
@@ -41,19 +47,19 @@ type Page struct {
 
 type parseResults struct {
     word []string
-    plural map[string]string
+    plural map[string][]string
 }
 
 func parsePage(cPage chan []byte, cResults chan parseResults) {
     var res parseResults
     res.word = make([]string, 0, 1024)
-    res.plural = make(map[string]string)
+    res.plural = make(map[string][]string, 1024)
 
     whitelist := map[string]bool{"initialism": true, "surname": true}
 
-    rxValidWord := regexp.MustCompile(`(?i:^[a-z]+$)`)
-    rxIgnore  := regexp.MustCompile(`(?i:initialism|surname\|lang=en)`)
-    rxPlural  := regexp.MustCompile(`plural of\|(\w+)\|lang=en`)
+    rxValidWord := regexp.MustCompile(`^[a-z]+$`)
+    rxIgnore  := regexp.MustCompile(`(?i:initialism|surname\|lang=en[^a-z])`)
+    rxPlural  := regexp.MustCompile(`plural of\|(\w+)\|lang=en[^a-z]`)
     rxEnglish := regexp.MustCompile(`==English==|Category:(en[^a-z]|English)`)
 
     NEXTPAGE:
@@ -82,8 +88,13 @@ func parsePage(cPage chan []byte, cResults chan parseResults) {
                     // decode this page
                     decoder.DecodeElement(&p, &et)
 
-                    if whitelist[p.Title] {
-                        res.word = append(res.word, p.Title)
+                    word := p.Title
+                    if includeMixedCase {
+                        word = strings.ToLower(word)
+                    }
+
+                    if whitelist[word] {
+                        res.word = append(res.word, word)
                         continue NEXTPAGE
                     }
 
@@ -91,7 +102,7 @@ func parsePage(cPage chan []byte, cResults chan parseResults) {
                         continue NEXTPAGE
                     }
 
-                    if !rxValidWord.MatchString(p.Title) {
+                    if !rxValidWord.MatchString(word) {
                         continue NEXTPAGE
                     }
 
@@ -101,14 +112,20 @@ func parsePage(cPage chan []byte, cResults chan parseResults) {
                         continue NEXTPAGE
                     }
 
-                    word := strings.ToLower(p.Title)
 
+                    // If it's a plural we need to track that, but we
+                    // still need to add it to our word list since
+                    // there are weird words like 'spices' which is
+                    // a plural of 'spice' which is a plural of 'spouse'
+                    //
+                    // Also, there are words like petties that has two
+                    // entries, one is 'petties' and one is 'Petties'
+                    // with the Uppser case being the plural of a surname
                     match := rxPlural.FindStringSubmatch(rev.Text)
                     if len(match) > 0 {
                         p := strings.ToLower(match[1])
                         if p != word {
-                            res.plural[word] = p
-                            continue NEXTPAGE
+                            res.plural[word] = append(res.plural[word], p)
                         }
                     }
 
@@ -143,7 +160,7 @@ func main() {
 
     flag.Parse()
 
-    cPage := make(chan []byte, nrCPU*2)
+    cPage := make(chan []byte, nrCPU)
     cResults := make(chan parseResults)
 
     fh := bufio.NewReader(os.Stdin)
@@ -174,7 +191,7 @@ func main() {
     }
 
     wordMap := make(map[string]bool, 1024)
-    plural := make(map[string]string, 1024)
+    plural := make(map[string][]string, 1024)
 
     for i := 0; i < nrCPU; i++ {
         res := <- cResults
@@ -184,13 +201,24 @@ func main() {
         }
 
         for k,v := range(res.plural) {
-            plural[k] = v
+            plural[k] = append(plural[k], v...)
         }
     }
 
     for k,v := range(plural) {
-        if (wordMap[v]) {
-            wordMap[k] = true
+        // Remove any plural words whose base word didn't make it into the list
+        // A plural may have multiple base words, if any of those base words
+        // made it to the list so should the plural form
+        del := true
+        for _, z := range(v) {
+            if wordMap[z] {
+                del = false
+                break
+            }
+        }
+
+        if del {
+            delete(wordMap, k)
         }
     }
 
