@@ -27,12 +27,9 @@ while (<>) {
         $word = lc($1);
         $plural_of = '';
 
-        if ($list{$word}) {
-            $word = '';
-            next;
-        }
-
         $good = 0;
+        $word = '' if ($list{$word});
+
         next;
     }
 
