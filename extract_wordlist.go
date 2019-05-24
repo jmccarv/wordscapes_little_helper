@@ -11,12 +11,13 @@ import (
     "sort"
     "strings"
     "flag"
-    //"log"
+    "log"
 )
 
 var minWordLength    int
 var maxWordLength    int
 var includeMixedCase bool
+var nrCPU int
 
 func init() {
     const (
@@ -25,7 +26,7 @@ func init() {
         defaultIncludeMixedCase = false
         minLengthUsage = "Minimum length word to output"
         maxLengthUsage = "Maximum length word to output (default 0 - no maximum)"
-        includeMixedCaseUsage = "Include words with upper case letters"
+        includeMixedCaseUsage = "Include words with upper case letters (results will be folded to lower case)"
     )
 
     flag.IntVar(&minWordLength, "min-length", defaultMinLength, minLengthUsage)
@@ -45,28 +46,63 @@ type Page struct {
     Revisions []Revision `xml:"revision"`
 }
 
-type parseResults struct {
-    word []string
-    plural map[string][]string
+
+type Word struct {
+    word string
+    pluralOf map[string]bool
+    validated bool
+    validating bool
 }
 
-func parsePage(cPage chan []byte, cResults chan parseResults) {
-    var res parseResults
-    res.word = make([]string, 0, 1024)
-    res.plural = make(map[string][]string, 1024)
+func parsePage(cPage chan []byte, cResults chan map[string]*Word) {
+    words := make(map[string]*Word, 1024)
+    var elem *Word
+    var ok bool
+    var rxValidWord *regexp.Regexp
 
     whitelist := map[string]bool{"initialism": true, "surname": true}
 
-    rxValidWord := regexp.MustCompile(`^[a-z]+$`)
-    rxIgnore  := regexp.MustCompile(`(?i:initialism|surname\|lang=en[^a-z])`)
+    if (includeMixedCase) {
+        rxValidWord = regexp.MustCompile(`^[a-zA-Z]+$`)
+    } else {
+        rxValidWord = regexp.MustCompile(`^[a-z]+$`)
+    }
+
+    rxIgnore  := regexp.MustCompile(`(?i:initialism of\|[^|]+\|lang=en|surname\|lang=en[^a-z])`)
     rxPlural  := regexp.MustCompile(`plural of\|(\w+)\|lang=en[^a-z]`)
     rxEnglish := regexp.MustCompile(`==English==|Category:(en[^a-z]|English)`)
+
+    wordOk := func(p Page) bool {
+        if whitelist[p.Title] {
+            return true
+        }
+
+        if len(p.Revisions) == 0 {
+            return false
+        }
+
+        if !rxValidWord.MatchString(p.Title) {
+            return false
+        }
+
+        rev := p.Revisions[len(p.Revisions)-1]
+
+        if rxIgnore.MatchString(rev.Text) {
+            return false
+        }
+
+        if rxEnglish.MatchString(rev.Text) {
+            return true
+        }
+
+        return false
+    }
 
     NEXTPAGE:
     for {
         data := <- cPage
         if data == nil {
-            cResults <- res
+            cResults <- words
             return
         }
 
@@ -88,30 +124,17 @@ func parsePage(cPage chan []byte, cResults chan parseResults) {
                     // decode this page
                     decoder.DecodeElement(&p, &et)
 
-                    word := p.Title
-                    if includeMixedCase {
-                        word = strings.ToLower(word)
-                    }
-
-                    if whitelist[word] {
-                        res.word = append(res.word, word)
+                    if !wordOk(p) {
                         continue NEXTPAGE
                     }
 
-                    if len(p.Revisions) == 0 {
-                        continue NEXTPAGE
+                    if elem, ok = words[p.Title]; !ok {
+                        // This is the first time we've seen this word
+                        // so we need to add it to our map
+                        //elem = &Word{ p.Title, make(map[string]bool,1), false }
+                        elem = &Word{ word: p.Title, pluralOf: make(map[string]bool,1) }
+                        words[p.Title] = elem
                     }
-
-                    if !rxValidWord.MatchString(word) {
-                        continue NEXTPAGE
-                    }
-
-                    rev := p.Revisions[len(p.Revisions)-1]
-
-                    if rxIgnore.MatchString(rev.Text) {
-                        continue NEXTPAGE
-                    }
-
 
                     // If it's a plural we need to track that, but we
                     // still need to add it to our word list since
@@ -121,17 +144,10 @@ func parsePage(cPage chan []byte, cResults chan parseResults) {
                     // Also, there are words like petties that has two
                     // entries, one is 'petties' and one is 'Petties'
                     // with the Uppser case being the plural of a surname
+                    rev := p.Revisions[len(p.Revisions)-1]
                     match := rxPlural.FindStringSubmatch(rev.Text)
-                    if len(match) > 0 {
-                        p := strings.ToLower(match[1])
-                        if p != word {
-                            res.plural[word] = append(res.plural[word], p)
-                        }
-                    }
-
-                    if rxEnglish.MatchString(rev.Text) {
-                        res.word = append(res.word, word)
-                        continue NEXTPAGE
+                    if len(match) > 1 && !strings.EqualFold(elem.word, match[1]) {
+                        elem.pluralOf[match[1]] = true
                     }
                 }
             }
@@ -154,14 +170,92 @@ func splitPages(data []byte, atEOF bool) (advance int, token []byte, err error) 
     }
 }
 
+func consolidateWords(cResults chan map[string]*Word) map[string]*Word {
+    words := make(map[string]*Word, 1024)
+
+    for i := 0; i < nrCPU; i++ {
+        ret := <- cResults
+
+        for w,e := range(ret) {
+            if elem, ok := words[w]; ok {
+                // Copy any plurals from ret to our existing word words[k]
+                for k,_ := range(e.pluralOf) {
+                    elem.pluralOf[k] = true
+                }
+
+            } else {
+                // Copy element e to our words map
+                words[w] = e
+            }
+
+            if len(words[w].pluralOf) == 0 {
+                words[w].validated = true
+            }
+        }
+    }
+
+    //fmt.Printf("cw: count: %v\n", len(words))
+    return words
+}
+
+func validateWord(w string, words map[string]*Word) (cycle bool) {
+    //var elem *Word
+    elem, ok := words[w]
+    if !ok {
+        return
+    }
+
+    if (elem.validating) {
+        return true
+    }
+
+    isValid := len(elem.pluralOf) == 0
+
+    elem.validating = true
+    for p,_ := range(elem.pluralOf) {
+        //fmt.Printf("Validating plural %v => %v\n", w, p)
+        if validateWord(p, words) {
+            // We cycled, which shouldn't happen
+            // but I suppose we'll consider this a valid word anyway
+            log.Printf("Cycle detected while validating %v", w)
+            isValid =true
+            break
+        }
+
+        if _, ok := words[p]; ok {
+            isValid = true
+            break
+        }
+    }
+    elem.validating = false
+
+    if isValid {
+        elem.validated = true
+    } else {
+        //fmt.Printf("Removing invalid plural %v\n", w)
+        delete(words, w)
+    }
+
+    return
+}
+
+// This will remove any plural words whose base
+// words aren't valid (not in the list)
+// This isn't as simple as it seems :(
+func validateWords(words map[string]*Word) map[string]*Word {
+    for k,_ := range(words) {
+        validateWord(k, words)
+    }
+    return words
+}
 
 func main() {
-    nrCPU := runtime.GOMAXPROCS(0)
+    nrCPU = runtime.GOMAXPROCS(0)
 
     flag.Parse()
 
     cPage := make(chan []byte, nrCPU)
-    cResults := make(chan parseResults)
+    cResults := make(chan map[string]*Word)
 
     fh := bufio.NewReader(os.Stdin)
 
@@ -183,53 +277,29 @@ func main() {
     }
 
     if scanner.Err() != nil {
-        fmt.Printf("scanner error: %v\n", scanner.Err().Error())
+        log.Fatalf("scanner error: %v\n", scanner.Err().Error())
     }
 
+    // Signal there are no more pages to process, this will cause the
+    // worders to write their results to the cResults channel
     for i := 0; i < nrCPU; i++ {
         cPage <- nil
     }
 
-    wordMap := make(map[string]bool, 1024)
-    plural := make(map[string][]string, 1024)
-
-    for i := 0; i < nrCPU; i++ {
-        res := <- cResults
-
-        for _, w := range(res.word) {
-            wordMap[w] = true
-        }
-
-        for k,v := range(res.plural) {
-            plural[k] = append(plural[k], v...)
-        }
+    // Consolidate all parsed words from the goroutines into one map
+    //words := validateWords(consolidateWords(cResults))
+    words := make(map[string]bool, 1024)
+    for w,_ := range(validateWords(consolidateWords(cResults))) {
+        words[strings.ToLower(w)] = true
     }
 
-    for k,v := range(plural) {
-        // Remove any plural words whose base word didn't make it into the list
-        // A plural may have multiple base words, if any of those base words
-        // made it to the list so should the plural form
-        del := true
-        for _, z := range(v) {
-            if wordMap[z] {
-                del = false
-                break
-            }
-        }
-
-        if del {
-            delete(wordMap, k)
-        }
+    wordList := make([]string, 0, len(words))
+    for k,_ := range(words) {
+        wordList = append(wordList, k)
     }
 
-
-    words := make([]string, 0, len(wordMap))
-    for k,_ := range(wordMap) {
-        words = append(words, k)
-    }
-
-    sort.Strings(words)
-    for _,w := range(words) {
+    sort.Strings(wordList)
+    for _,w := range(wordList) {
         if len(w) >= minWordLength && (maxWordLength == 0 || len(w) <= maxWordLength) {
             fmt.Println(w)
         }
