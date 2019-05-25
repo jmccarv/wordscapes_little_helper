@@ -5,7 +5,6 @@ import (
     "os"
     "fmt"
     "bytes"
-    "encoding/xml"
     "runtime"
     "regexp"
     "sort"
@@ -54,14 +53,24 @@ type Word struct {
     validating bool
 }
 
+// I had previously used the xml module to parse pages more "correctly"
+// This not-at-all correct parser is much faster
+// On my test system the runtime of this program on the wiktionary dump
+// ran in 1.5 minutes using xml and about .5 minutes this way
 func parsePage(cPage chan []byte, cResults chan map[string]*Word) {
     words := make(map[string]*Word, 1024)
     var elem *Word
     var ok bool
-    var rxValidWord *regexp.Regexp
+
+    tagTitle := []byte("<title>")
+    tagTitleEnd := []byte("</title>")
+    tagRevision := []byte("<revision>")
+    tagText := []byte("<text")
+    tagTextEnd := []byte("</text>")
 
     whitelist := map[string]bool{"initialism": true, "surname": true}
 
+    var rxValidWord *regexp.Regexp
     if (includeMixedCase) {
         rxValidWord = regexp.MustCompile(`^[a-zA-Z]+$`)
     } else {
@@ -72,26 +81,16 @@ func parsePage(cPage chan []byte, cResults chan map[string]*Word) {
     rxPlural  := regexp.MustCompile(`plural of\|(\w+)\|lang=en[^a-z]`)
     rxEnglish := regexp.MustCompile(`==English==|Category:(en[^a-z]|English)`)
 
-    wordOk := func(p Page) bool {
-        if whitelist[p.Title] {
+    wordOk := func(word string, text []byte) bool {
+        if whitelist[word] {
             return true
         }
 
-        if len(p.Revisions) == 0 {
+        if rxIgnore.Match(text) {
             return false
         }
 
-        if !rxValidWord.MatchString(p.Title) {
-            return false
-        }
-
-        rev := p.Revisions[len(p.Revisions)-1]
-
-        if rxIgnore.MatchString(rev.Text) {
-            return false
-        }
-
-        if rxEnglish.MatchString(rev.Text) {
+        if rxEnglish.Match(text) {
             return true
         }
 
@@ -106,51 +105,60 @@ func parsePage(cPage chan []byte, cResults chan map[string]*Word) {
             return
         }
 
-        decoder := xml.NewDecoder(bytes.NewReader(data))
-        decoder.Strict = false
+        title := bytes.SplitN(data, tagTitle, 2)
+        if len(title) != 2 {
+            continue NEXTPAGE
+        }
 
-        for {
-            // Read tokens from XML document
-            t, _ := decoder.Token()
-            if t == nil {
-                break
-            }
+        title = bytes.SplitN(title[1], tagTitleEnd, 2)
+        if len(title) != 2 {
+            continue NEXTPAGE
+        }
 
-            // Check for page start elements
-            switch et := t.(type) {
-            case xml.StartElement:
-                if et.Name.Local == "page" {
-                    var p Page
-                    // decode this page
-                    decoder.DecodeElement(&p, &et)
+        word := string(title[0])
 
-                    if !wordOk(p) {
-                        continue NEXTPAGE
-                    }
+        if !rxValidWord.MatchString(word) {
+            continue NEXTPAGE
+        }
 
-                    if elem, ok = words[p.Title]; !ok {
-                        // This is the first time we've seen this word
-                        // so we need to add it to our map
-                        //elem = &Word{ p.Title, make(map[string]bool,1), false }
-                        elem = &Word{ word: p.Title, pluralOf: make(map[string]bool,1) }
-                        words[p.Title] = elem
-                    }
+        revisions := bytes.Split(data, tagRevision)
+        if len(revisions) < 1 {
+            continue NEXTPAGE
+        }
 
-                    // If it's a plural we need to track that, but we
-                    // still need to add it to our word list since
-                    // there are weird words like 'spices' which is
-                    // a plural of 'spice' which is a plural of 'spouse'
-                    //
-                    // Also, there are words like petties that has two
-                    // entries, one is 'petties' and one is 'Petties'
-                    // with the Uppser case being the plural of a surname
-                    rev := p.Revisions[len(p.Revisions)-1]
-                    match := rxPlural.FindStringSubmatch(rev.Text)
-                    if len(match) > 1 && !strings.EqualFold(elem.word, match[1]) {
-                        elem.pluralOf[match[1]] = true
-                    }
-                }
-            }
+        text := bytes.SplitN(revisions[len(revisions)-1], tagText, 2)
+        if len(text) != 2 {
+            continue NEXTPAGE
+        }
+
+        text = bytes.SplitN(text[1], tagTextEnd, 2)
+        if len(text) != 2 {
+            continue NEXTPAGE
+        }
+
+        if !wordOk(word, text[0]) {
+            continue NEXTPAGE
+        }
+
+        if elem, ok = words[word]; !ok {
+            // This is the first time we've seen this word
+            // so we need to add it to our map
+            //elem = &Word{ p.Title, make(map[string]bool,1), false }
+            elem = &Word{ word: word, pluralOf: make(map[string]bool,1) }
+            words[word] = elem
+        }
+
+        // If it's a plural we need to track that, but we
+        // still need to add it to our word list since
+        // there are weird words like 'spices' which is
+        // a plural of 'spice' which is a plural of 'spouse'
+        //
+        // Also, there are words like petties that has two
+        // entries, one is 'petties' and one is 'Petties'
+        // with the Uppser case being the plural of a surname
+        match := rxPlural.FindSubmatch(text[0])
+        if len(match) > 1 && !strings.EqualFold(elem.word, string(match[1])) {
+            elem.pluralOf[string(match[1])] = true
         }
     }
 }
