@@ -59,8 +59,6 @@ func parsePage(cPage chan []byte, cResults chan map[string]*Word) {
     tagText := []byte("<text")
     tagTextEnd := []byte("</text>")
 
-    whitelist := map[string]bool{"initialism": true, "surname": true}
-
     var rxValidWord *regexp.Regexp
     if (includeMixedCase) {
         rxValidWord = regexp.MustCompile(`^[a-zA-Z]+$`)
@@ -68,15 +66,11 @@ func parsePage(cPage chan []byte, cResults chan map[string]*Word) {
         rxValidWord = regexp.MustCompile(`^[a-z]+$`)
     }
 
-    rxIgnore  := regexp.MustCompile(`(?i:initialism of\|[^|]+\|lang=en|surname\|lang=en[^a-z])`)
+    rxIgnore  := regexp.MustCompile(`initialism of\|[^|]+\|lang=en|surname\|lang=en[^a-z]`)
     rxPlural  := regexp.MustCompile(`plural of\|(\w+)\|lang=en[^a-z]`)
     rxEnglish := regexp.MustCompile(`==English==|Category:(en[^a-z]|English)`)
 
     wordOk := func(word string, text []byte) bool {
-        if whitelist[word] {
-            return true
-        }
-
         if rxIgnore.Match(text) {
             return false
         }
