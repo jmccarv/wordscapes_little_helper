@@ -11,6 +11,7 @@ import (
     "strings"
     "flag"
     "log"
+    //"github.com/pkg/profile"
 )
 
 var minWordLength    int
@@ -35,16 +36,6 @@ func init() {
     flag.BoolVar(&includeMixedCase, "mixed-case", defaultIncludeMixedCase, includeMixedCaseUsage)
     flag.BoolVar(&includeMixedCase, "i", defaultIncludeMixedCase, includeMixedCaseUsage+" (short)")
 }
-
-type Revision struct {
-    Text string `xml:"text"`
-}
-
-type Page struct {
-    Title string `xml:"title"`
-    Revisions []Revision `xml:"revision"`
-}
-
 
 type Word struct {
     word string
@@ -258,11 +249,12 @@ func validateWords(words map[string]*Word) map[string]*Word {
 }
 
 func main() {
+    //defer profile.Start().Stop()
     nrCPU = runtime.GOMAXPROCS(0)
 
     flag.Parse()
 
-    cPage := make(chan []byte, nrCPU)
+    cPage := make(chan []byte, nrCPU*2)
     cResults := make(chan map[string]*Word)
 
     fh := bufio.NewReader(os.Stdin)
