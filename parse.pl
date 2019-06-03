@@ -67,4 +67,4 @@ for (keys %plural) {
 #print Dumper(\%plural);
 
 #print "\nword list:\n";
-print "$_\n" for sort keys %list
+print "$_\n" for sort grep { length($_) >= 3 && length($_) <= 7 } keys %list

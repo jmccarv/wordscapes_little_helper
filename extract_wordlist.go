@@ -26,7 +26,7 @@ func init() {
         defaultIncludeMixedCase = false
         minLengthUsage = "Minimum length word to output"
         maxLengthUsage = "Maximum length word to output (default 0 - no maximum)"
-        includeMixedCaseUsage = "Include words with upper case letters (results will be folded to lower case)"
+        includeMixedCaseUsage = "Include words with upper case letters"
     )
 
     flag.IntVar(&minWordLength, "min-length", defaultMinLength, minLengthUsage)
@@ -48,18 +48,9 @@ type Word struct {
 // This not-at-all correct parser is much faster
 // On my test system the runtime of this program on the wiktionary dump
 // ran in 1.5 minutes using xml and about .5 minutes this way
-func parsePageBlock(cPage chan []byte, cResults chan map[string]*Word) {
-    words := make(map[string]*Word, 1024)
-    var elem *Word
-    var ok bool
-
-    tagTitle := []byte("<title>")
-    tagTitleEnd := []byte("</title>")
-    tagRevision := []byte("<revision>")
-    tagText := []byte("<text")
-    tagTextEnd := []byte("</text>")
-
+func parsePageBlock(cPage chan []byte, cWord chan *Word) {
     var rxValidWord *regexp.Regexp
+
     if (includeMixedCase) {
         rxValidWord = regexp.MustCompile(`^[a-zA-Z]+$`)
     } else {
@@ -85,18 +76,18 @@ func parsePageBlock(cPage chan []byte, cResults chan map[string]*Word) {
     for {
         block := <- cPage
         if block == nil {
-            cResults <- words
+            cWord <- nil
             return
         }
 
         NEXTPAGE:
         for _,data := range(bytes.SplitAfter(block, []byte("</page>"))) {
-            title := bytes.SplitN(data, tagTitle, 2)
+            title := bytes.SplitN(data, []byte("<title>"), 2)
             if len(title) != 2 {
                 continue NEXTPAGE
             }
 
-            title = bytes.SplitN(title[1], tagTitleEnd, 2)
+            title = bytes.SplitN(title[1], []byte("</title>"), 2)
             if len(title) != 2 {
                 continue NEXTPAGE
             }
@@ -107,17 +98,17 @@ func parsePageBlock(cPage chan []byte, cResults chan map[string]*Word) {
                 continue NEXTPAGE
             }
 
-            revisions := bytes.Split(data, tagRevision)
+            revisions := bytes.Split(data, []byte("<revision>"))
             if len(revisions) < 1 {
                 continue NEXTPAGE
             }
 
-            text := bytes.SplitN(revisions[len(revisions)-1], tagText, 2)
+            text := bytes.SplitN(revisions[len(revisions)-1], []byte("<text"), 2)
             if len(text) != 2 {
                 continue NEXTPAGE
             }
 
-            text = bytes.SplitN(text[1], tagTextEnd, 2)
+            text = bytes.SplitN(text[1], []byte("</text>"), 2)
             if len(text) != 2 {
                 continue NEXTPAGE
             }
@@ -126,13 +117,7 @@ func parsePageBlock(cPage chan []byte, cResults chan map[string]*Word) {
                 continue NEXTPAGE
             }
 
-            if elem, ok = words[word]; !ok {
-                // This is the first time we've seen this word
-                // so we need to add it to our map
-                //elem = &Word{ p.Title, make(map[string]bool,1), false }
-                elem = &Word{ word: word, pluralOf: make(map[string]bool,1) }
-                words[word] = elem
-            }
+            elem := &Word{ word: word, pluralOf: make(map[string]bool,1) }
 
             // If it's a plural we need to track that, but we
             // still need to add it to our word list since
@@ -146,6 +131,8 @@ func parsePageBlock(cPage chan []byte, cResults chan map[string]*Word) {
             if len(match) > 1 && !strings.EqualFold(elem.word, string(match[1])) {
                 elem.pluralOf[string(match[1])] = true
             }
+
+            cWord <- elem
         }
     }
 }
@@ -165,42 +152,54 @@ func splitPages(data []byte, atEOF bool) (advance int, token []byte, err error) 
     }
 }
 
-func consolidateWords(cResults chan map[string]*Word) map[string]*Word {
+func gatherWords (cWord chan *Word, cResults chan map[string]*Word, nrCPU int) {
     words := make(map[string]*Word, 1024)
 
-    for i := 0; i < nrCPU; i++ {
-        ret := <- cResults
+    for {
+        elem := <- cWord
 
-        for w,e := range(ret) {
-            if elem, ok := words[w]; ok {
-                // Copy any plurals from ret to our existing word words[k]
-                for k,_ := range(e.pluralOf) {
-                    elem.pluralOf[k] = true
-                }
-
-            } else {
-                // Copy element e to our words map
-                words[w] = e
+        if elem == nil {
+            nrCPU--
+            if nrCPU == 0 {
+                cResults <- words
+                return
             }
 
-            if len(words[w].pluralOf) == 0 {
-                words[w].validated = true
+            continue
+        }
+
+        if e,ok := words[elem.word]; ok {
+            // Copy any plurals from ret to our existing word words[k]
+            for k,_ := range(elem.pluralOf) {
+                e.pluralOf[k] = true
             }
+            elem = e
+
+        } else {
+            // Copy element e to our words map
+            words[elem.word] = elem
+        }
+
+        if len(elem.pluralOf) == 0 {
+            elem.validated = true
+        } else {
+            elem.validated = false
         }
     }
-
-    //fmt.Printf("cw: count: %v\n", len(words))
-    return words
 }
 
+// Returns true if we've detected a loop in our plurals
 func validateWord(w string, words map[string]*Word) (cycle bool) {
-    //var elem *Word
     elem, ok := words[w]
     if !ok {
-        return
+        return false
     }
 
-    if (elem.validating) {
+    if elem.validated {
+        return false
+    }
+
+    if elem.validating {
         return true
     }
 
@@ -227,21 +226,19 @@ func validateWord(w string, words map[string]*Word) (cycle bool) {
     if isValid {
         elem.validated = true
     } else {
-        //fmt.Printf("Removing invalid plural %v\n", w)
         delete(words, w)
     }
 
-    return
+    return false
 }
 
 // This will remove any plural words whose base
 // words aren't valid (not in the list)
 // This isn't as simple as it seems :(
-func validateWords(words map[string]*Word) map[string]*Word {
+func validateWords(words map[string]*Word) {
     for k,_ := range(words) {
         validateWord(k, words)
     }
-    return words
 }
 
 func main() {
@@ -251,50 +248,37 @@ func main() {
     flag.Parse()
 
     cPage := make(chan []byte, nrCPU*2)
+    cWord := make(chan *Word, nrCPU)
     cResults := make(chan map[string]*Word)
 
+    // Set up the scanner
     fh := bufio.NewReader(os.Stdin)
-
     scanner := bufio.NewScanner(fh)
     scanner.Split(splitPages)
     scanner.Buffer(make([]byte, 1024*1024*10), 1024*1024*100)
 
     for i:= 0; i < nrCPU; i++ {
-        go parsePageBlock(cPage, cResults)
+        go parsePageBlock(cPage, cWord)
     }
+    go gatherWords(cWord, cResults, nrCPU)
 
-    nrFound := 0
-    emptyCount := 0
     for scanner.Scan() {
-        nrFound++
-
         page := make([]byte, len(scanner.Bytes()))
         copy(page, scanner.Bytes())
-        if len(cPage) == 0 {
-            emptyCount++
-        }
         cPage <- page
     }
-
-    log.Printf("Channel was empty %v times out of %v blocks (empty %.2f%%)\n", emptyCount, nrFound, (float64(emptyCount)/float64(nrFound))*100.0)
 
     if scanner.Err() != nil {
         log.Fatalf("scanner error: %v\n", scanner.Err().Error())
     }
 
-    // Signal there are no more pages to process, this will cause the
-    // worders to write their results to the cResults channel
+    // Signal there are no more pages to process.
     for i := 0; i < nrCPU; i++ {
         cPage <- nil
     }
+    words := <- cResults
 
-    // Consolidate all parsed words from the goroutines into one map
-    //words := validateWords(consolidateWords(cResults))
-    words := make(map[string]bool, 1024)
-    for w,_ := range(validateWords(consolidateWords(cResults))) {
-        words[strings.ToLower(w)] = true
-    }
-
+    validateWords(words)
     wordList := make([]string, 0, len(words))
     for k,_ := range(words) {
         wordList = append(wordList, k)
