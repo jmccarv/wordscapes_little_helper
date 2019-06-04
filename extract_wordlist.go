@@ -17,7 +17,6 @@ import (
 var minWordLength    int
 var maxWordLength    int
 var includeMixedCase bool
-var nrCPU int
 
 func init() {
     const (
@@ -40,9 +39,12 @@ func init() {
 type Word struct {
     word string
     pluralOf map[string]bool
+    isValid bool
     validated bool
     validating bool
 }
+
+type WordMap map[string]*Word
 
 // I had previously used the xml module to parse pages more "correctly"
 // This not-at-all correct parser is much faster
@@ -152,8 +154,8 @@ func splitPages(data []byte, atEOF bool) (advance int, token []byte, err error) 
     }
 }
 
-func gatherWords (cWord chan *Word, cResults chan map[string]*Word, nrCPU int) {
-    words := make(map[string]*Word, 1024)
+func gatherWords(cWord chan *Word, cResults chan WordMap, nrCPU int) {
+    words := make(WordMap)
 
     for {
         elem := <- cWord
@@ -169,7 +171,8 @@ func gatherWords (cWord chan *Word, cResults chan map[string]*Word, nrCPU int) {
         }
 
         if e,ok := words[elem.word]; ok {
-            // Copy any plurals from ret to our existing word words[k]
+            // Copy any plurals to the existing word
+            // and use the existing element
             for k,_ := range(elem.pluralOf) {
                 e.pluralOf[k] = true
             }
@@ -182,74 +185,59 @@ func gatherWords (cWord chan *Word, cResults chan map[string]*Word, nrCPU int) {
 
         if len(elem.pluralOf) == 0 {
             elem.validated = true
+            elem.isValid = true
         } else {
             elem.validated = false
         }
     }
 }
 
-// Returns true if we've detected a loop in our plurals
-func validateWord(w string, words map[string]*Word) (cycle bool) {
-    elem, ok := words[w]
-    if !ok {
-        return false
-    }
+func (words WordMap) validateWord(elem *Word) (valid, cycle bool) {
+    var c bool
 
     if elem.validated {
-        return false
+        return elem.isValid, false
     }
 
     if elem.validating {
-        return true
+        return false, true
     }
-
-    isValid := len(elem.pluralOf) == 0
 
     elem.validating = true
     for p,_ := range(elem.pluralOf) {
-        //fmt.Printf("Validating plural %v => %v\n", w, p)
-        if validateWord(p, words) {
+        e, ok := words[p]
+        if !ok {
+            continue
+        }
+
+        elem.isValid, c = words.validateWord(e)
+        if c {
             // We cycled, which shouldn't happen
             // but I suppose we'll consider this a valid word anyway
-            log.Printf("Cycle detected while validating %v", w)
-            isValid =true
+            log.Printf("Cycle detected while validating plurals of '%v'", e.word)
+            elem.isValid =true
             break
         }
 
-        if _, ok := words[p]; ok {
-            isValid = true
+        if elem.isValid {
             break
         }
     }
     elem.validating = false
+    elem.validated = true
 
-    if isValid {
-        elem.validated = true
-    } else {
-        delete(words, w)
-    }
-
-    return false
-}
-
-// This will remove any plural words whose base
-// words aren't valid (not in the list)
-// This isn't as simple as it seems :(
-func validateWords(words map[string]*Word) {
-    for k,_ := range(words) {
-        validateWord(k, words)
-    }
+    return elem.isValid, false
 }
 
 func main() {
     //defer profile.Start().Stop()
-    nrCPU = runtime.GOMAXPROCS(0)
+    nrCPU := runtime.GOMAXPROCS(0)
 
     flag.Parse()
 
     cPage := make(chan []byte, nrCPU*2)
     cWord := make(chan *Word, nrCPU)
-    cResults := make(chan map[string]*Word)
+    cResults := make(chan WordMap)
 
     // Set up the scanner
     fh := bufio.NewReader(os.Stdin)
@@ -278,16 +266,17 @@ func main() {
     }
     words := <- cResults
 
-    validateWords(words)
     wordList := make([]string, 0, len(words))
-    for k,_ := range(words) {
-        wordList = append(wordList, k)
+    for _,e := range(words) {
+        if v,_ := words.validateWord(e); v {
+            if len(e.word) >= minWordLength && (maxWordLength == 0 || len(e.word) <= maxWordLength) {
+                wordList = append(wordList, e.word)
+            }
+        }
     }
 
     sort.Strings(wordList)
     for _,w := range(wordList) {
-        if len(w) >= minWordLength && (maxWordLength == 0 || len(w) <= maxWordLength) {
-            fmt.Println(w)
-        }
+        fmt.Println(w)
     }
 }
