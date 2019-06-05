@@ -82,44 +82,46 @@ func parsePageBlock(cPage chan []byte, cWord chan *Word) {
             return
         }
 
-        NEXTPAGE:
         for _,data := range(bytes.SplitAfter(block, []byte("</page>"))) {
             title := bytes.SplitN(data, []byte("<title>"), 2)
             if len(title) != 2 {
-                continue NEXTPAGE
+                continue
             }
 
             title = bytes.SplitN(title[1], []byte("</title>"), 2)
             if len(title) != 2 {
-                continue NEXTPAGE
+                continue
             }
 
             word := string(title[0])
 
             if !rxValidWord.MatchString(word) {
-                continue NEXTPAGE
+                continue
             }
 
             revisions := bytes.Split(data, []byte("<revision>"))
             if len(revisions) < 1 {
-                continue NEXTPAGE
+                continue
             }
 
             text := bytes.SplitN(revisions[len(revisions)-1], []byte("<text"), 2)
             if len(text) != 2 {
-                continue NEXTPAGE
+                continue
             }
 
             text = bytes.SplitN(text[1], []byte("</text>"), 2)
             if len(text) != 2 {
-                continue NEXTPAGE
+                continue
             }
 
             if !wordOk(word, text[0]) {
-                continue NEXTPAGE
+                continue
             }
 
-            elem := &Word{ word: word, pluralOf: make(map[string]bool,1) }
+            elem := &Word{
+                word: word,
+                pluralOf: make(map[string]bool,1),
+            }
 
             // If it's a plural we need to track that, but we
             // still need to add it to our word list since
