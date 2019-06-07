@@ -38,7 +38,7 @@ func init() {
 
 type Word struct {
     word string
-    pluralOf map[string]bool
+    deps map[string]bool
     isValid bool
     validated bool
     validating bool
@@ -59,20 +59,22 @@ func parsePageBlock(cPage chan []byte, cWord chan *Word) {
         rxValidWord = regexp.MustCompile(`^[a-z]+$`)
     }
 
-    rxIgnore  := regexp.MustCompile(`initialism of\|[^|]+\|lang=en|surname\|lang=en[^a-z]`)
-    rxPlural  := regexp.MustCompile(`plural of\|(\w+)\|lang=en[^a-z]`)
+    rxIgnore := regexp.MustCompile(`(initialism|archaic spelling) of\|[^|]+\|lang=en|surname\|lang=en[^a-z]`)
     rxEnglish := regexp.MustCompile(`==English==|Category:(en[^a-z]|English)`)
+    //rxDep := regexp.MustCompile(`{{(plural|alternative form) of.*\|lang=en[^a-z].*?}}`)
+    rxDep := regexp.MustCompile(`{{plural of.*\|lang=en[^a-z].*?}}`)
+    rxDepWord := regexp.MustCompile(`\|(\w+)(\||}})`)
 
     wordOk := func(word string, text []byte) bool {
+        if !rxEnglish.Match(text) {
+            return false
+        }
+
         if rxIgnore.Match(text) {
             return false
         }
 
-        if rxEnglish.Match(text) {
-            return true
-        }
-
-        return false
+        return true
     }
 
     for {
@@ -120,7 +122,7 @@ func parsePageBlock(cPage chan []byte, cWord chan *Word) {
 
             elem := &Word{
                 word: word,
-                pluralOf: make(map[string]bool,1),
+                deps: make(map[string]bool,1),
             }
 
             // If it's a plural we need to track that, but we
@@ -131,9 +133,17 @@ func parsePageBlock(cPage chan []byte, cWord chan *Word) {
             // Also, there are words like petties that has two
             // entries, one is 'petties' and one is 'Petties'
             // with the Uppser case being the plural of a surname
-            match := rxPlural.FindSubmatch(text[0])
-            if len(match) > 1 && !strings.EqualFold(elem.word, string(match[1])) {
-                elem.pluralOf[string(match[1])] = true
+            d := rxDep.Find(text[0])
+            if d != nil {
+                w := rxDepWord.FindSubmatch(d)
+
+                if w == nil {
+                    continue
+                }
+
+                if !strings.EqualFold(elem.word, string(w[0])) {
+                    elem.deps[string(w[1])] = true
+                }
             }
 
             cWord <- elem
@@ -175,8 +185,8 @@ func gatherWords(cWord chan *Word, cResults chan WordMap, nrCPU int) {
         if e,ok := words[elem.word]; ok {
             // Copy any plurals to the existing word
             // and use the existing element
-            for k,_ := range(elem.pluralOf) {
-                e.pluralOf[k] = true
+            for k,_ := range(elem.deps) {
+                e.deps[k] = true
             }
             elem = e
 
@@ -185,7 +195,8 @@ func gatherWords(cWord chan *Word, cResults chan WordMap, nrCPU int) {
             words[elem.word] = elem
         }
 
-        if len(elem.pluralOf) == 0 {
+        //log.Printf("gw: %v dep count %v", elem.word, len(elem.deps))
+        if len(elem.deps) == 0 {
             elem.validated = true
             elem.isValid = true
         } else {
@@ -196,8 +207,10 @@ func gatherWords(cWord chan *Word, cResults chan WordMap, nrCPU int) {
 
 func (words WordMap) validateWord(elem *Word) (valid, cycle bool) {
     var c bool
+    //log.Printf("validating %v", elem.word)
 
     if elem.validated {
+        //log.Printf("vw: (validated) returning %v", elem.isValid)
         return elem.isValid, false
     }
 
@@ -206,7 +219,7 @@ func (words WordMap) validateWord(elem *Word) (valid, cycle bool) {
     }
 
     elem.validating = true
-    for p,_ := range(elem.pluralOf) {
+    for p,_ := range(elem.deps) {
         e, ok := words[p]
         if !ok {
             continue

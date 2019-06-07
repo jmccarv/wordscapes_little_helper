@@ -131,7 +131,7 @@ func main() {
 
 }
 
-func findWords (letterTab [256]int, wordList map[int][]string, template string, letters string) []string {
+func findWords (letterTab [256]int, wordList map[int][]string, template, letters string) []string {
     found := false
     searchLen := len(template)
     ret := make([]string, 0)
