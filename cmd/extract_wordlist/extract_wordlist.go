@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -12,29 +11,13 @@ import (
 	"sort"
 	"strings"
 	//"github.com/pkg/profile"
+
+	"github.com/urfave/cli"
 )
 
 var minWordLength int
 var maxWordLength int
 var includeMixedCase bool
-
-func init() {
-	const (
-		defaultMinLength        = 1
-		defaultMaxLength        = 0
-		defaultIncludeMixedCase = false
-		minLengthUsage          = "Minimum length word to output"
-		maxLengthUsage          = "Maximum length word to output (default 0 - no maximum)"
-		includeMixedCaseUsage   = "Include words with upper case letters"
-	)
-
-	flag.IntVar(&minWordLength, "min-length", defaultMinLength, minLengthUsage)
-	flag.IntVar(&minWordLength, "m", defaultMinLength, minLengthUsage+" (short)")
-	flag.IntVar(&maxWordLength, "max-length", defaultMaxLength, maxLengthUsage)
-	flag.IntVar(&maxWordLength, "l", defaultMaxLength, maxLengthUsage+" (short)")
-	flag.BoolVar(&includeMixedCase, "mixed-case", defaultIncludeMixedCase, includeMixedCaseUsage)
-	flag.BoolVar(&includeMixedCase, "i", defaultIncludeMixedCase, includeMixedCaseUsage+" (short)")
-}
 
 type Word struct {
 	word       string
@@ -243,11 +226,8 @@ func (words WordMap) validateWord(elem *Word) (valid, cycle bool) {
 	return elem.isValid, false
 }
 
-func main() {
-	//defer profile.Start().Stop()
+func run(c *cli.Context) error {
 	nrCPU := runtime.GOMAXPROCS(0)
-
-	flag.Parse()
 
 	cPage := make(chan []byte, nrCPU*2)
 	cWord := make(chan *Word, nrCPU)
@@ -292,5 +272,46 @@ func main() {
 	sort.Strings(wordList)
 	for _, w := range wordList {
 		fmt.Println(w)
+	}
+
+	return nil
+}
+
+func main() {
+	//defer profile.Start().Stop()
+
+	cli.AppHelpTemplate = fmt.Sprintf(`%s
+Reads XML on stdin and writes parsed words to stdout
+`, cli.AppHelpTemplate)
+
+	app := cli.NewApp()
+	app.Name = "extract_wordlist"
+	app.Usage = "Parse wordlist from an wiktionary XML dump"
+	app.HideVersion = true
+
+	app.Flags = []cli.Flag{
+		cli.IntFlag{
+			Name:        "min-length, m",
+			Value:       3,
+			Usage:       "Minimum length word to output",
+			Destination: &minWordLength,
+		},
+		cli.IntFlag{
+			Name:        "max-length, l",
+			Value:       7,
+			Usage:       "Maximum length word to output",
+			Destination: &maxWordLength,
+		},
+		cli.BoolFlag{
+			Name:        "mixed-case, i",
+			Usage:       "Include words with upper case letters",
+			Destination: &includeMixedCase,
+		},
+	}
+
+	app.Action = run
+
+	if err := app.Run(os.Args); err != nil {
+		log.Fatal(err)
 	}
 }
