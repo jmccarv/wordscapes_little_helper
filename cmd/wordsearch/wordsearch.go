@@ -22,35 +22,6 @@ var flagListFile string
 
 var wordList map[int][]string
 
-func init() {
-	defaultWordlist := os.Getenv("WORDSEARCH_WORDLIST")
-	if len(defaultWordlist) == 0 {
-		defaultWordlist = "/dev/stdin"
-	}
-
-	const (
-		defaultLetters   = ""
-		defaultTemplate  = ""
-		defaultServeHTTP = false
-		wordlistUsage    = "Wordlist file to read"
-		lettersUsage     = "Letters to use to make up word"
-		templateUsage    = "Template to search for, spaces for any letter"
-		serveHTTPUsage   = "Listen for requests on HTTP"
-	)
-
-	flag.BoolVar(&flagServeHTTP, "serve-http", defaultServeHTTP, serveHTTPUsage)
-	flag.BoolVar(&flagServeHTTP, "s", defaultServeHTTP, serveHTTPUsage+"( short)")
-
-	flag.StringVar(&flagListFile, "wordlist", defaultWordlist, wordlistUsage)
-	flag.StringVar(&flagListFile, "w", defaultWordlist, wordlistUsage+" (short)")
-
-	flag.StringVar(&flagTemplate, "tmplate", defaultTemplate, templateUsage)
-	flag.StringVar(&flagTemplate, "t", defaultTemplate, templateUsage+" (short)")
-
-	flag.StringVar(&flagLetters, "letters", defaultLetters, lettersUsage)
-	flag.StringVar(&flagLetters, "l", defaultLetters, lettersUsage+" (short)")
-}
-
 func search(w http.ResponseWriter, req *http.Request) {
 	//io.WriteString(w, fmt.
 	//fmt.Fprintf(w, "%v\n%v\n", req.Method, req.URL.RawQuery)
@@ -94,7 +65,7 @@ func search(w http.ResponseWriter, req *http.Request) {
 	log.Printf("Search time: %v\n", time.Now().Sub(start))
 }
 
-func main() {
+func run() {
 	//nrcpu := runtime.GOMAXPROCS(0)
 
 	flag.Parse()
@@ -190,4 +161,49 @@ func slurp(fn string) map[int][]string {
 	}
 
 	return ret
+}
+
+func main() {
+	//defer profile.Start().Stop()
+
+	cli.AppHelpTemplate = fmt.Sprintf(`%s
+Searches a wordlist for words matching a template using a specified set of letters
+AKA a cheat program for the wordscapes game
+`, cli.AppHelpTemplate)
+
+	app := cli.NewApp()
+	app.Name = "wordsearch"
+	app.Usage = "Search a wordlist or something"
+	app.HideVersion = true
+
+	app.Flags = []cli.Flag{
+		cli.BoolFlag{
+			Name:        "serve-http, d",
+			Usage:       "Listen for requests on HTTP",
+			Destination: &flagServeHTTP,
+		},
+		cli.StringFlag{
+			Name:        "wordlist, w",
+			Usage:       "Wordlist file to read, one word per line",
+			Value:       "/dev/stdin",
+			EnvVar:      "WORDSEARCH_WORDLIST",
+			Destination: &flagListFile,
+		},
+		cli.StringFlag{
+			Name:        "template, t",
+			Usage:       "Template to search for, spaces for any letter, ex: 'a...' to find all four letter words that start with 'a'",
+			Destination: &flagTemplate,
+		},
+		cli.StringFlag{
+			Name:        "letters, l",
+			Usage:       "Available letters to use to make words, ex: 'ebsls' might be used to make the word 'bless'",
+			Destination: &flagLetters,
+		},
+	}
+
+	app.Action = run
+
+	if err := app.Run(os.Args); err != nil {
+		log.Fatal(err)
+	}
 }
