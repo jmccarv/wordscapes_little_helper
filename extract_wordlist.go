@@ -1,47 +1,47 @@
 package main
 
 import (
-    "bufio"
-    "os"
-    "fmt"
-    "bytes"
-    "runtime"
-    "regexp"
-    "sort"
-    "strings"
-    "flag"
-    "log"
-    //"github.com/pkg/profile"
+	"bufio"
+	"bytes"
+	"flag"
+	"fmt"
+	"log"
+	"os"
+	"regexp"
+	"runtime"
+	"sort"
+	"strings"
+	//"github.com/pkg/profile"
 )
 
-var minWordLength    int
-var maxWordLength    int
+var minWordLength int
+var maxWordLength int
 var includeMixedCase bool
 
 func init() {
-    const (
-        defaultMinLength = 1
-        defaultMaxLength = 0
-        defaultIncludeMixedCase = false
-        minLengthUsage = "Minimum length word to output"
-        maxLengthUsage = "Maximum length word to output (default 0 - no maximum)"
-        includeMixedCaseUsage = "Include words with upper case letters"
-    )
+	const (
+		defaultMinLength        = 1
+		defaultMaxLength        = 0
+		defaultIncludeMixedCase = false
+		minLengthUsage          = "Minimum length word to output"
+		maxLengthUsage          = "Maximum length word to output (default 0 - no maximum)"
+		includeMixedCaseUsage   = "Include words with upper case letters"
+	)
 
-    flag.IntVar(&minWordLength, "min-length", defaultMinLength, minLengthUsage)
-    flag.IntVar(&minWordLength, "m", defaultMinLength, minLengthUsage+" (short)")
-    flag.IntVar(&maxWordLength, "max-length", defaultMaxLength, maxLengthUsage)
-    flag.IntVar(&maxWordLength, "l", defaultMaxLength, maxLengthUsage+" (short)")
-    flag.BoolVar(&includeMixedCase, "mixed-case", defaultIncludeMixedCase, includeMixedCaseUsage)
-    flag.BoolVar(&includeMixedCase, "i", defaultIncludeMixedCase, includeMixedCaseUsage+" (short)")
+	flag.IntVar(&minWordLength, "min-length", defaultMinLength, minLengthUsage)
+	flag.IntVar(&minWordLength, "m", defaultMinLength, minLengthUsage+" (short)")
+	flag.IntVar(&maxWordLength, "max-length", defaultMaxLength, maxLengthUsage)
+	flag.IntVar(&maxWordLength, "l", defaultMaxLength, maxLengthUsage+" (short)")
+	flag.BoolVar(&includeMixedCase, "mixed-case", defaultIncludeMixedCase, includeMixedCaseUsage)
+	flag.BoolVar(&includeMixedCase, "i", defaultIncludeMixedCase, includeMixedCaseUsage+" (short)")
 }
 
 type Word struct {
-    word string
-    deps map[string]bool
-    isValid bool
-    validated bool
-    validating bool
+	word       string
+	deps       map[string]bool
+	isValid    bool
+	validated  bool
+	validating bool
 }
 
 type WordMap map[string]*Word
@@ -51,247 +51,246 @@ type WordMap map[string]*Word
 // On my test system the runtime of this program on the wiktionary dump
 // ran in 1.5 minutes using xml and about .5 minutes this way
 func parsePageBlock(cPage chan []byte, cWord chan *Word) {
-    var rxValidWord *regexp.Regexp
+	var rxValidWord *regexp.Regexp
 
-    if (includeMixedCase) {
-        rxValidWord = regexp.MustCompile(`^[a-zA-Z]+$`)
-    } else {
-        rxValidWord = regexp.MustCompile(`^[a-z]+$`)
-    }
+	if includeMixedCase {
+		rxValidWord = regexp.MustCompile(`^[a-zA-Z]+$`)
+	} else {
+		rxValidWord = regexp.MustCompile(`^[a-z]+$`)
+	}
 
-    rxIgnore := regexp.MustCompile(`(initialism|archaic spelling) of\|[^|]+\|lang=en|surname\|lang=en[^a-z]`)
-    rxEnglish := regexp.MustCompile(`==English==|Category:(en[^a-z]|English)`)
-    //rxDep := regexp.MustCompile(`{{(plural|alternative form) of.*\|lang=en[^a-z].*?}}`)
-    rxDep := regexp.MustCompile(`{{plural of.*\|lang=en[^a-z].*?}}`)
-    rxDepWord := regexp.MustCompile(`\|(\w+)(\||}})`)
+	rxIgnore := regexp.MustCompile(`(initialism|archaic spelling) of\|[^|]+\|lang=en|surname\|lang=en[^a-z]`)
+	rxEnglish := regexp.MustCompile(`==English==|Category:(en[^a-z]|English)`)
+	//rxDep := regexp.MustCompile(`{{(plural|alternative form) of.*\|lang=en[^a-z].*?}}`)
+	rxDep := regexp.MustCompile(`{{plural of.*\|lang=en[^a-z].*?}}`)
+	rxDepWord := regexp.MustCompile(`\|(\w+)(\||}})`)
 
-    wordOk := func(word string, text []byte) bool {
-        if !rxEnglish.Match(text) {
-            return false
-        }
+	wordOk := func(word string, text []byte) bool {
+		if !rxEnglish.Match(text) {
+			return false
+		}
 
-        if rxIgnore.Match(text) {
-            return false
-        }
+		if rxIgnore.Match(text) {
+			return false
+		}
 
-        return true
-    }
+		return true
+	}
 
-    for {
-        block := <- cPage
-        if block == nil {
-            cWord <- nil
-            return
-        }
+	for {
+		block := <-cPage
+		if block == nil {
+			cWord <- nil
+			return
+		}
 
-        for _,data := range(bytes.SplitAfter(block, []byte("</page>"))) {
-            title := bytes.SplitN(data, []byte("<title>"), 2)
-            if len(title) != 2 {
-                continue
-            }
+		for _, data := range bytes.SplitAfter(block, []byte("</page>")) {
+			title := bytes.SplitN(data, []byte("<title>"), 2)
+			if len(title) != 2 {
+				continue
+			}
 
-            title = bytes.SplitN(title[1], []byte("</title>"), 2)
-            if len(title) != 2 {
-                continue
-            }
+			title = bytes.SplitN(title[1], []byte("</title>"), 2)
+			if len(title) != 2 {
+				continue
+			}
 
-            word := string(title[0])
+			word := string(title[0])
 
-            if !rxValidWord.MatchString(word) {
-                continue
-            }
+			if !rxValidWord.MatchString(word) {
+				continue
+			}
 
-            revisions := bytes.Split(data, []byte("<revision>"))
-            if len(revisions) < 1 {
-                continue
-            }
+			revisions := bytes.Split(data, []byte("<revision>"))
+			if len(revisions) < 1 {
+				continue
+			}
 
-            text := bytes.SplitN(revisions[len(revisions)-1], []byte("<text"), 2)
-            if len(text) != 2 {
-                continue
-            }
+			text := bytes.SplitN(revisions[len(revisions)-1], []byte("<text"), 2)
+			if len(text) != 2 {
+				continue
+			}
 
-            text = bytes.SplitN(text[1], []byte("</text>"), 2)
-            if len(text) != 2 {
-                continue
-            }
+			text = bytes.SplitN(text[1], []byte("</text>"), 2)
+			if len(text) != 2 {
+				continue
+			}
 
-            if !wordOk(word, text[0]) {
-                continue
-            }
+			if !wordOk(word, text[0]) {
+				continue
+			}
 
-            elem := &Word{
-                word: word,
-                deps: make(map[string]bool,1),
-            }
+			elem := &Word{
+				word: word,
+				deps: make(map[string]bool, 1),
+			}
 
-            // If it's a plural we need to track that, but we
-            // still need to add it to our word list since
-            // there are weird words like 'spices' which is
-            // a plural of 'spice' which is a plural of 'spouse'
-            //
-            // Also, there are words like petties that has two
-            // entries, one is 'petties' and one is 'Petties'
-            // with the Uppser case being the plural of a surname
-            d := rxDep.Find(text[0])
-            if d != nil {
-                w := rxDepWord.FindSubmatch(d)
+			// If it's a plural we need to track that, but we
+			// still need to add it to our word list since
+			// there are weird words like 'spices' which is
+			// a plural of 'spice' which is a plural of 'spouse'
+			//
+			// Also, there are words like petties that has two
+			// entries, one is 'petties' and one is 'Petties'
+			// with the Uppser case being the plural of a surname
+			d := rxDep.Find(text[0])
+			if d != nil {
+				w := rxDepWord.FindSubmatch(d)
 
-                if w == nil {
-                    continue
-                }
+				if w == nil {
+					continue
+				}
 
-                if !strings.EqualFold(elem.word, string(w[0])) {
-                    elem.deps[string(w[1])] = true
-                }
-            }
+				if !strings.EqualFold(elem.word, string(w[0])) {
+					elem.deps[string(w[1])] = true
+				}
+			}
 
-            cWord <- elem
-        }
-    }
+			cWord <- elem
+		}
+	}
 }
 
-
 func splitPages(data []byte, atEOF bool) (advance int, token []byte, err error) {
-    if (atEOF && len(data) == 0) {
-        return 0, nil, nil
-    }
+	if atEOF && len(data) == 0 {
+		return 0, nil, nil
+	}
 
-    found := bytes.LastIndex(data, []byte("</page>"))
-    if (found >= 0) {
-        return found+7, data[0:found+7], nil
+	found := bytes.LastIndex(data, []byte("</page>"))
+	if found >= 0 {
+		return found + 7, data[0 : found+7], nil
 
-    } else {
-        return 0, nil, nil
-    }
+	} else {
+		return 0, nil, nil
+	}
 }
 
 func gatherWords(cWord chan *Word, cResults chan WordMap, nrCPU int) {
-    words := make(WordMap)
+	words := make(WordMap)
 
-    for {
-        elem := <- cWord
+	for {
+		elem := <-cWord
 
-        if elem == nil {
-            nrCPU--
-            if nrCPU == 0 {
-                cResults <- words
-                return
-            }
+		if elem == nil {
+			nrCPU--
+			if nrCPU == 0 {
+				cResults <- words
+				return
+			}
 
-            continue
-        }
+			continue
+		}
 
-        if e,ok := words[elem.word]; ok {
-            // Copy any plurals to the existing word
-            // and use the existing element
-            for k,_ := range(elem.deps) {
-                e.deps[k] = true
-            }
-            elem = e
+		if e, ok := words[elem.word]; ok {
+			// Copy any plurals to the existing word
+			// and use the existing element
+			for k, _ := range elem.deps {
+				e.deps[k] = true
+			}
+			elem = e
 
-        } else {
-            // Copy element e to our words map
-            words[elem.word] = elem
-        }
+		} else {
+			// Copy element e to our words map
+			words[elem.word] = elem
+		}
 
-        //log.Printf("gw: %v dep count %v", elem.word, len(elem.deps))
-        if len(elem.deps) == 0 {
-            elem.validated = true
-            elem.isValid = true
-        } else {
-            elem.validated = false
-        }
-    }
+		//log.Printf("gw: %v dep count %v", elem.word, len(elem.deps))
+		if len(elem.deps) == 0 {
+			elem.validated = true
+			elem.isValid = true
+		} else {
+			elem.validated = false
+		}
+	}
 }
 
 func (words WordMap) validateWord(elem *Word) (valid, cycle bool) {
-    var c bool
-    //log.Printf("validating %v", elem.word)
+	var c bool
+	//log.Printf("validating %v", elem.word)
 
-    if elem.validated {
-        //log.Printf("vw: (validated) returning %v", elem.isValid)
-        return elem.isValid, false
-    }
+	if elem.validated {
+		//log.Printf("vw: (validated) returning %v", elem.isValid)
+		return elem.isValid, false
+	}
 
-    if elem.validating {
-        return false, true
-    }
+	if elem.validating {
+		return false, true
+	}
 
-    elem.validating = true
-    for p,_ := range(elem.deps) {
-        e, ok := words[p]
-        if !ok {
-            continue
-        }
+	elem.validating = true
+	for p, _ := range elem.deps {
+		e, ok := words[p]
+		if !ok {
+			continue
+		}
 
-        elem.isValid, c = words.validateWord(e)
-        if c {
-            // We cycled, which shouldn't happen
-            // but I suppose we'll consider this a valid word anyway
-            log.Printf("Cycle detected while validating plurals of '%v'", e.word)
-            elem.isValid =true
-            break
-        }
+		elem.isValid, c = words.validateWord(e)
+		if c {
+			// We cycled, which shouldn't happen
+			// but I suppose we'll consider this a valid word anyway
+			log.Printf("Cycle detected while validating plurals of '%v'", e.word)
+			elem.isValid = true
+			break
+		}
 
-        if elem.isValid {
-            break
-        }
-    }
-    elem.validating = false
-    elem.validated = true
+		if elem.isValid {
+			break
+		}
+	}
+	elem.validating = false
+	elem.validated = true
 
-    return elem.isValid, false
+	return elem.isValid, false
 }
 
 func main() {
-    //defer profile.Start().Stop()
-    nrCPU := runtime.GOMAXPROCS(0)
+	//defer profile.Start().Stop()
+	nrCPU := runtime.GOMAXPROCS(0)
 
-    flag.Parse()
+	flag.Parse()
 
-    cPage := make(chan []byte, nrCPU*2)
-    cWord := make(chan *Word, nrCPU)
-    cResults := make(chan WordMap)
+	cPage := make(chan []byte, nrCPU*2)
+	cWord := make(chan *Word, nrCPU)
+	cResults := make(chan WordMap)
 
-    // Set up the scanner
-    fh := bufio.NewReader(os.Stdin)
-    scanner := bufio.NewScanner(fh)
-    scanner.Split(splitPages)
-    scanner.Buffer(make([]byte, 1024*1024*10), 1024*1024*100)
+	// Set up the scanner
+	fh := bufio.NewReader(os.Stdin)
+	scanner := bufio.NewScanner(fh)
+	scanner.Split(splitPages)
+	scanner.Buffer(make([]byte, 1024*1024*10), 1024*1024*100)
 
-    for i:= 0; i < nrCPU; i++ {
-        go parsePageBlock(cPage, cWord)
-    }
-    go gatherWords(cWord, cResults, nrCPU)
+	for i := 0; i < nrCPU; i++ {
+		go parsePageBlock(cPage, cWord)
+	}
+	go gatherWords(cWord, cResults, nrCPU)
 
-    for scanner.Scan() {
-        page := make([]byte, len(scanner.Bytes()))
-        copy(page, scanner.Bytes())
-        cPage <- page
-    }
+	for scanner.Scan() {
+		page := make([]byte, len(scanner.Bytes()))
+		copy(page, scanner.Bytes())
+		cPage <- page
+	}
 
-    if scanner.Err() != nil {
-        log.Fatalf("scanner error: %v\n", scanner.Err().Error())
-    }
+	if scanner.Err() != nil {
+		log.Fatalf("scanner error: %v\n", scanner.Err().Error())
+	}
 
-    // Signal there are no more pages to process.
-    for i := 0; i < nrCPU; i++ {
-        cPage <- nil
-    }
-    words := <- cResults
+	// Signal there are no more pages to process.
+	for i := 0; i < nrCPU; i++ {
+		cPage <- nil
+	}
+	words := <-cResults
 
-    wordList := make([]string, 0, len(words))
-    for _,e := range(words) {
-        if v,_ := words.validateWord(e); v {
-            if len(e.word) >= minWordLength && (maxWordLength == 0 || len(e.word) <= maxWordLength) {
-                wordList = append(wordList, e.word)
-            }
-        }
-    }
+	wordList := make([]string, 0, len(words))
+	for _, e := range words {
+		if v, _ := words.validateWord(e); v {
+			if len(e.word) >= minWordLength && (maxWordLength == 0 || len(e.word) <= maxWordLength) {
+				wordList = append(wordList, e.word)
+			}
+		}
+	}
 
-    sort.Strings(wordList)
-    for _,w := range(wordList) {
-        fmt.Println(w)
-    }
+	sort.Strings(wordList)
+	for _, w := range wordList {
+		fmt.Println(w)
+	}
 }
