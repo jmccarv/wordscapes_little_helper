@@ -26,8 +26,14 @@ A solution might be:
 
 This application provides two programs:
 
-- extract_wordlist - Extract a list of words from an XML dump of the wiktionary.org wiki
-- wlh - Perform a oneshot search from the command line or start a web server serving the wlh app
+* extract_wordlist - Extract a list of words from an XML dump of the wiktionary.org wiki
+* wlh
+    * Perform a oneshot search from the command line
+    * Start a web server serving the wlh app
+
+XML dumps of the wiktonary wiki can be found here:
+
+https://dumps.wikimedia.org/enwiktionary/latest/enwiktionary-latest-pages-articles.xml.bz2
 
 # GET THE CODE
 
@@ -64,6 +70,10 @@ Help is available for both commands via --help or -h.
 Start the web server:
 
     bin/wlh -w wordlist serve
+
+Connect to the app:
+
+    http://localhost:8080/
 
 # REPOSITORY
 
