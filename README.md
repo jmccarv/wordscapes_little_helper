@@ -10,19 +10,19 @@ ranging from 3 to 7 letters arranged in a crossword-puzzle style. Sometimes
 you will know one or more of the letters in a word, where it crosses another
 you've already guessed. Something like this:
 
- Letters: DIBNRE
+    Letters: DIBNRE
 
-  _
- ______
-  _
-  _
+      _
+     ______
+      _
+      _
 
- A solution might be:
+A solution might be:
 
-  B
- BINDER
-  N
-  D
+      B
+     BINDER
+      N
+      D
 
 This application provides two programs:
 
