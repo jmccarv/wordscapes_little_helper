@@ -9,5 +9,7 @@ fatal() {
     exit 1
 }
 
-cd bin || mkdir bin || fatal "No bin/ directory"
+test -d bin || mkdir bin || fatal "Failed to create directory 'bin'"
+cd bin || fatal "Faled to switch to directory 'bin'"
+
 for cmd in ../cmd/*; do go build $cmd; done
