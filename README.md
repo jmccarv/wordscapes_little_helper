@@ -47,6 +47,10 @@ From the root of the project, run:
 
 # USE
 
+## Help
+
+Help is available for both commands via --help or -h.
+
 ## Create a wordlist file from a wiktionary XML file
 
     bin/extract_wordlist < wiki.xml > wordlist
