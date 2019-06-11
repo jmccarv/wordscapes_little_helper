@@ -9,6 +9,9 @@ func gatherWords(cWord chan *Word, cResults chan WordMap, nrCPU int) {
 	for {
 		elem := <-cWord
 
+		// We'll get a nil word from each parser goroutine (nrCPU routines)
+		// Once they've all signaled they're done, we can send our results
+		// and exit
 		if elem == nil {
 			nrCPU--
 			if nrCPU == 0 {

@@ -19,8 +19,13 @@ func parsePageBlock(cPage chan []byte, cWord chan *Word) {
 		rxValidWord = regexp.MustCompile(`^[a-z]+$`)
 	}
 
+	// Words to ignore/skip
 	rxIgnore := regexp.MustCompile(`(initialism|archaic spelling) of\|[^|]+\|lang=en|surname\|lang=en[^a-z]`)
+
+	// We're only interested in English words for this list.
 	rxEnglish := regexp.MustCompile(`==English==|Category:(en[^a-z]|English)`)
+
+	// Find dependencies. At least one dependency must be valid for a word to be valid.
 	//rxDep := regexp.MustCompile(`{{(plural|alternative form) of.*\|lang=en[^a-z].*?}}`)
 	rxDep := regexp.MustCompile(`{{plural of.*\|lang=en[^a-z].*?}}`)
 	rxDepWord := regexp.MustCompile(`\|(\w+)(\||}})`)
@@ -39,11 +44,19 @@ func parsePageBlock(cPage chan []byte, cWord chan *Word) {
 
 	for {
 		block := <-cPage
+
+		// A nil block signals the end of input and that there's no more work
+		// to do. Time to exit. We send a nil word along to the gather coroutine
+		// so it knows to finish up.
 		if block == nil {
 			cWord <- nil
 			return
 		}
 
+		// Each word is stored in a separate wiki <page>..</page>
+		// The word itself is the <title>word</title> of the page
+		// There may be one or more <revision>s that hold <text>.
+		// We search the <text>..</text> to know if the word is valid.
 		for _, data := range bytes.SplitAfter(block, []byte("</page>")) {
 			title := bytes.SplitN(data, []byte("<title>"), 2)
 			if len(title) != 2 {
