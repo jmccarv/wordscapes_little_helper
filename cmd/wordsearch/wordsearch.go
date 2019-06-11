@@ -65,18 +65,40 @@ func search(w http.ResponseWriter, req *http.Request) {
 	log.Printf("Search time: %v\n", time.Now().Sub(start))
 }
 
-func run() {
-	//nrcpu := runtime.GOMAXPROCS(0)
+func logger(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("%s requested %s", r.RemoteAddr, r.URL)
+		h.ServeHTTP(w, r)
+	})
+}
 
-	flag.Parse()
+func run(c *cli.Context) error {
+	//nrcpu := runtime.GOMAXPROCS(0)
 
 	start := time.Now()
 	wordList = slurp(flagListFile)
 	log.Printf("Loaded wordlist in %v", time.Now().Sub(start))
 
 	if flagServeHTTP {
-		http.HandleFunc("/search", search)
-		log.Fatal(http.ListenAndServe(":8080", nil))
+		/*
+			//var fs FileSystem = "www"
+			//http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(fs)))
+			//http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(FileSystem("www"))))
+			http.Handle("/html/", http.FileServer(FileSystem("www")))
+			http.Handle("/js/", http.FileServer(FileSystem("www")))
+			//http.Handle("/", http.RedirectHandler("/html/", http.StatusMovedPermanently))
+
+			//http.HandleFunc("/search", search)
+			http.HandleFunc("/api/search/", search)
+			log.Fatal(http.ListenAndServe(":8080", nil))
+		*/
+
+		h := http.NewServeMux()
+		h.Handle("/", http.FileServer(FileSystem("www/html")))
+		h.Handle("/js/", http.FileServer(FileSystem("www")))
+		h.HandleFunc("/api/search/", search)
+
+		log.Fatal(http.ListenAndServe(":8080", logger(h)))
 	}
 
 	// Not running in server mode, do the search from command line flags
@@ -101,6 +123,7 @@ func run() {
 	}
 	log.Printf("Search time: %v\n", time.Now().Sub(start))
 
+	return nil
 }
 
 func findWords(letterTab [256]int, wordList map[int][]string, template, letters string) []string {
@@ -184,7 +207,7 @@ AKA a cheat program for the wordscapes game
 		},
 		cli.StringFlag{
 			Name:        "wordlist, w",
-			Usage:       "Wordlist file to read, one word per line",
+			Usage:       "Read wordlist from `FILE`, one word per line",
 			Value:       "/dev/stdin",
 			EnvVar:      "WORDSEARCH_WORDLIST",
 			Destination: &flagListFile,
