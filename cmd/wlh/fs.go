@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -32,4 +34,27 @@ func (fs FileSystem) Open(path string) (http.File, error) {
 
 	log.Printf("Open(): Returning %V", f)
 	return f, nil
+}
+
+// Read a list of words into a map of slices of words
+// keyed on word length
+func slurp(fn string) map[int][]string {
+	ret := make(map[int][]string)
+
+	fh, err := os.Open(fn)
+	if err != nil {
+		log.Fatal("Failed to open list file: %v", err)
+	}
+	defer fh.Close()
+
+	scanner := bufio.NewScanner(fh)
+	for scanner.Scan() {
+		l := len(scanner.Text())
+		if ret[l] == nil {
+			ret[l] = make([]string, 1)
+		}
+		ret[l] = append(ret[l], scanner.Text())
+	}
+
+	return ret
 }
