@@ -1,3 +1,4 @@
+// extract_wordlist parses a wiktionary XML dump into a list of english words.
 package main
 
 import (
@@ -19,14 +20,19 @@ var includeMixedCase bool
 
 type Word struct {
 	word       string
-	deps       map[string]bool
-	isValid    bool
-	validated  bool
-	validating bool
+	deps       map[string]bool // any dependencies this word has that must be valid for this word to be valid
+	isValid    bool            // true if the word has been validated and is a valid word
+	validated  bool            // true if the word has gone through validation. if false, you cannot rely on the value of isValid
+	validating bool            // used to catch infinite validation loops
 }
 
+// As words are parsed, they are placed in this map to weed out duplicates. The
+// map is keyed on the word.
 type WordMap map[string]*Word
 
+// As we read in buffers of data, this finds the last page in the buffer. Used
+// to send as many <page>..</page> pages as possible at a time to the parsing
+// goroutines.
 func splitPages(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	if atEOF && len(data) == 0 {
 		return 0, nil, nil
@@ -41,6 +47,9 @@ func splitPages(data []byte, atEOF bool) (advance int, token []byte, err error) 
 	}
 }
 
+// This method will validate words that have dependencies by verifying
+// that at least one dependency is valid. If no dependencies are valid
+// this word is invalid.
 func (words WordMap) validateWord(elem *Word) (valid, cycle bool) {
 	var c bool
 	//log.Printf("validating %v", elem.word)
@@ -87,7 +96,10 @@ func run(c *cli.Context) error {
 	cWord := make(chan *Word, nrCPU)
 	cResults := make(chan WordMap)
 
-	// Set up the scanner
+	// This is the scanner we'll use to split the XML into
+	// blocks of data. Each block will contain one or more
+	// groups of <page>..</page> elements. Each block is written
+	// to the cPage channel to be parsed by the parsePageBlock goroutine.
 	fh := bufio.NewReader(os.Stdin)
 	scanner := bufio.NewScanner(fh)
 	scanner.Split(splitPages)
@@ -112,8 +124,12 @@ func run(c *cli.Context) error {
 	for i := 0; i < nrCPU; i++ {
 		cPage <- nil
 	}
+
+	// Get the results from the gatherWords goroutine.
 	words := <-cResults
 
+	// Now we'll filter words for length, validate any words that have
+	// dependencies, and add all valid words to an array.
 	wordList := make([]string, 0, len(words))
 	for _, e := range words {
 		if v, _ := words.validateWord(e); v {
@@ -123,6 +139,7 @@ func run(c *cli.Context) error {
 		}
 	}
 
+	// Sort and output our results.
 	sort.Strings(wordList)
 	for _, w := range wordList {
 		fmt.Println(w)

@@ -1,5 +1,8 @@
 package main
 
+// Goroutine to gather words as they're parsed from XML and
+// add them to a results map. If a word has no dependencies
+// it can be marked as valid.
 func gatherWords(cWord chan *Word, cResults chan WordMap, nrCPU int) {
 	words := make(WordMap)
 
@@ -24,17 +27,16 @@ func gatherWords(cWord chan *Word, cResults chan WordMap, nrCPU int) {
 			}
 			elem = e
 
+			if len(elem.deps) != 0 {
+				elem.validated = false
+				elem.isValid = false
+			}
+
 		} else {
 			// Copy element e to our words map
 			words[elem.word] = elem
 		}
 
 		//log.Printf("gw: %v dep count %v", elem.word, len(elem.deps))
-		if len(elem.deps) == 0 {
-			elem.validated = true
-			elem.isValid = true
-		} else {
-			elem.validated = false
-		}
 	}
 }

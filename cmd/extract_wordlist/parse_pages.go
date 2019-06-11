@@ -81,8 +81,10 @@ func parsePageBlock(cPage chan []byte, cWord chan *Word) {
 			}
 
 			elem := &Word{
-				word: word,
-				deps: make(map[string]bool, 1),
+				word:      word,
+				deps:      make(map[string]bool, 1),
+				validated: true,
+				isValid:   true,
 			}
 
 			// If it's a plural we need to track that, but we
@@ -93,6 +95,8 @@ func parsePageBlock(cPage chan []byte, cWord chan *Word) {
 			// Also, there are words like petties that has two
 			// entries, one is 'petties' and one is 'Petties'
 			// with the Uppser case being the plural of a surname
+			//
+			// FIXME: Handle multiple matches of this regex
 			d := rxDep.Find(text[0])
 			if d != nil {
 				w := rxDepWord.FindSubmatch(d)
@@ -103,6 +107,8 @@ func parsePageBlock(cPage chan []byte, cWord chan *Word) {
 
 				if !strings.EqualFold(elem.word, string(w[0])) {
 					elem.deps[string(w[1])] = true
+					elem.validated = false
+					elem.isValid = false
 				}
 			}
 
