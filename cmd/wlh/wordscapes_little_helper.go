@@ -53,7 +53,7 @@ AKA a cheat program for the wordscapes game
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:        "template, t",
-					Usage:       "Template to search for, spaces for any letter, ex: 'a...' to find all four letter words that start with 'a'",
+					Usage:       "Template to search for, non-alpha for any letter, ex: 'a...' to find all four letter words that start with 'a'",
 					Destination: &flagTemplate,
 				},
 				cli.StringFlag{

@@ -48,8 +48,8 @@ Or clone the git repo:
 # BUILDING
 
 From the root of the project, run:
- ./build.sh
 
+./build.sh
 
 # USE
 
@@ -63,7 +63,7 @@ Help is available for both commands via --help or -h.
 
 ## Run a oneshot search from the command line
 
-    bin/wlh -w wordlist find --template .... --letters dibnre
+    bin/wlh -w wordlist find --template .i.. --letters dibnre
 
 ## Web Server
 
