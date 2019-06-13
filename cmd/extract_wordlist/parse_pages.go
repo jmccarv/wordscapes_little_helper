@@ -42,17 +42,7 @@ func parsePageBlock(cPage chan []byte, cWord chan *Word) {
 		return true
 	}
 
-	for {
-		block := <-cPage
-
-		// A nil block signals the end of input and that there's no more work
-		// to do. Time to exit. We send a nil word along to the gather coroutine
-		// so it knows to finish up.
-		if block == nil {
-			cWord <- nil
-			return
-		}
-
+	for block := range cPage {
 		// Each word is stored in a separate wiki <page>..</page>
 		// The word itself is the <title>word</title> of the page
 		// There may be one or more <revision>s that hold <text>.
@@ -128,4 +118,6 @@ func parsePageBlock(cPage chan []byte, cWord chan *Word) {
 			cWord <- elem
 		}
 	}
+
+	cWord <- nil
 }

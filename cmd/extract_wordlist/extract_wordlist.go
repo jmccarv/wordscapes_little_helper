@@ -21,7 +21,7 @@ var includeMixedCase bool
 type Word struct {
 	word       string
 	deps       map[string]bool // any dependencies this word has that must be valid for this word to be valid
-	isValid    bool            // true if the word has been validated and is a valid word
+	isValid    bool            // true if the word is a valid word but see validated below
 	validated  bool            // true if the word has gone through validation. if false, you cannot rely on the value of isValid
 	validating bool            // used to catch infinite validation loops
 }
@@ -89,13 +89,7 @@ func (words WordMap) validateWord(elem *Word) (valid, cycle bool) {
 	return elem.isValid, false
 }
 
-func run(c *cli.Context) error {
-	nrCPU := runtime.GOMAXPROCS(0)
-
-	cPage := make(chan []byte, nrCPU*2)
-	cWord := make(chan *Word, nrCPU)
-	cResults := make(chan WordMap)
-
+func chunkXML(cPage chan []byte) {
 	// This is the scanner we'll use to split the XML into
 	// blocks of data. Each block will contain one or more
 	// groups of <page>..</page> elements. Each block is written
@@ -105,10 +99,8 @@ func run(c *cli.Context) error {
 	scanner.Split(splitPages)
 	scanner.Buffer(make([]byte, 1024*1024*10), 1024*1024*100)
 
-	for i := 0; i < nrCPU; i++ {
-		go parsePageBlock(cPage, cWord)
-	}
-	go gatherWords(cWord, cResults, nrCPU)
+	// Signal there are no more pages to process.
+	defer close(cPage)
 
 	for scanner.Scan() {
 		page := make([]byte, len(scanner.Bytes()))
@@ -119,11 +111,25 @@ func run(c *cli.Context) error {
 	if scanner.Err() != nil {
 		log.Fatalf("scanner error: %v\n", scanner.Err().Error())
 	}
+}
 
-	// Signal there are no more pages to process.
+func run(c *cli.Context) error {
+	nrCPU := runtime.GOMAXPROCS(0)
+
+	cPage := make(chan []byte, nrCPU*2)
+	cWord := make(chan *Word, nrCPU)
+	cResults := make(chan WordMap)
+
+	// Split incoming XML into blocks of wiki pages
+	go chunkXML(cPage)
+
+	// Split blocks of pages into pages and parse words from those pages
 	for i := 0; i < nrCPU; i++ {
-		cPage <- nil
+		go parsePageBlock(cPage, cWord)
 	}
+
+	// Gather parsed words
+	go gatherWords(cWord, cResults, nrCPU)
 
 	// Get the results from the gatherWords goroutine.
 	words := <-cResults
