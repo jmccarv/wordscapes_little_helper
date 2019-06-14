@@ -91,7 +91,7 @@ function doSearch() {
     $("input.letters").removeClass("bg-warning");
 
     $.ajax({
-        url: window.location.href + "/api/search",
+        url: window.location.href + "/api/search/",
         data: { letters: letters, template: template },
         type: "GET",
         dataType: "json"
