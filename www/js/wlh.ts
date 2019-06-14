@@ -4,7 +4,7 @@ interface Search {
     template: String;
 }
 
-var prevSearch: Search = { letters: "", template:"" }
+var prevSearch: Search = { letters: "", template: "" }
 
 function addBox() {
     var t = $("span.template")
@@ -91,8 +91,7 @@ function doSearch() {
     $("input.letters").removeClass("bg-warning");
 
     $.ajax({
-        //url: window.location.href + "/api/search",
-        url: "/api/search",
+        url: window.location.href + "/api/search",
         data: { letters: letters, template: template },
         type: "GET",
         dataType: "json"
