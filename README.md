@@ -79,7 +79,7 @@ Connect to the app:
 
 The git repository for this application may be found here:
 
-    https://bitbucket.org/jmccarv/wordscapes_little_helper
+    https://github.com/jmccarv/wordscapes_little_helper
 
 # AUTHOR
 
