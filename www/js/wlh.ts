@@ -9,7 +9,7 @@ var prevSearch: Search = { letters: "", template: "" }
 function addBox() {
     var t = $("span.template")
 
-    if (t.children().length >= 7)
+    if (t.children().length >= 10)
         return;
 
     var box = $(

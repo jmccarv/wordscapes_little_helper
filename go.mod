@@ -1,4 +1,4 @@
-module bitbucket.org/jmccarv/wordscapes_little_helper
+module gitlab.parasite.cc/slam/wordscapes_little_helper
 
 go 1.12
 

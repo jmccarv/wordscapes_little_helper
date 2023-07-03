@@ -1,7 +1,7 @@
 var prevSearch = { letters: "", template: "" };
 function addBox() {
     var t = $("span.template");
-    if (t.children().length >= 7)
+    if (t.children().length >= 10)
         return;
     var box = $("<textarea>", { cols: 3,
         rows: 1,
