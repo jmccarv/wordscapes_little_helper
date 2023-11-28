@@ -37,7 +37,7 @@ func stateFromReq(req *http.Request) (wlhState, error) {
 	if err := req.ParseForm(); err != nil {
 		return state, err
 	}
-	log.Printf("%v\n%v\n%v\n", req.Method, req.URL.RawQuery, req.Form)
+	//log.Printf("%v\n%v\n%v\n", req.Method, req.URL.RawQuery, req.Form)
 
 	for i := 0; i < 10; i++ {
 		name := fmt.Sprintf("t%d", i)
@@ -111,7 +111,7 @@ func doSearch(state wlhState) wlhState {
 }
 
 func doReq(w http.ResponseWriter, req *http.Request, mut func(wlhState) wlhState) {
-	log.Printf("%+v\n", req)
+	//log.Printf("%+v\n", req)
 
 	state, err := stateFromReq(req)
 	if err != nil {
