@@ -2,8 +2,8 @@ package main
 
 import (
 	"cmp"
-	"slices"
 	"log"
+	"slices"
 )
 
 func findWords(wordList map[int][]string, freqList map[string]int, template, letters string) []string {
@@ -58,15 +58,13 @@ func findWords(wordList map[int][]string, freqList map[string]int, template, let
 		}
 	}
 
-	log.Println("sorting results")
-	slices.SortFunc(ret, func(a,b string) int {
+	slices.SortFunc(ret, func(a, b string) int {
 		af := freqList[a]
 		bf := freqList[b]
 		if af == bf {
 			return cmp.Compare(a, b)
 		}
-		log.Println(a,af,b,bf)
-		return cmp.Compare(af, bf)*-1
+		return cmp.Compare(af, bf) * -1
 	})
 
 	return ret
