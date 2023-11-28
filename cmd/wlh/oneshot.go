@@ -14,8 +14,9 @@ func oneshotSearch(c *cli.Context) error {
 	//nrcpu := runtime.GOMAXPROCS(0)
 
 	start := time.Now()
-	wordList = slurp(flagListFile)
+	wordList = readWordList(flagListFile)
 	log.Printf("Loaded wordlist in %v", time.Now().Sub(start))
+	freqList = readFreqList(flagFreqFile)
 
 	template := flagTemplate
 	letters := flagLetters
@@ -26,13 +27,7 @@ func oneshotSearch(c *cli.Context) error {
 
 	start = time.Now()
 
-	// Generate array of characters that are availabe
-	var letterTab [256]int
-	for _, l := range letters {
-		letterTab[l]++
-	}
-
-	for _, word := range findWords(letterTab, wordList, template, letters) {
+	for _, word := range findWords(wordList, freqList, template, letters) {
 		fmt.Println(word)
 	}
 	log.Printf("Search time: %v\n", time.Now().Sub(start))

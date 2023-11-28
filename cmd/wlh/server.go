@@ -1,15 +1,28 @@
 package main
 
 import (
-	"encoding/json"
+	"fmt"
+	"html/template"
 	"log"
 	"net/http"
-	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/urfave/cli"
 )
+
+var tmpl *template.Template
+
+type TmplBox struct {
+	Name  string
+	Value string
+}
+type wlhState struct {
+	Tmpl    []TmplBox
+	Letters string
+	Results []string
+}
 
 func logger(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -18,56 +31,135 @@ func logger(h http.Handler) http.Handler {
 	})
 }
 
+func stateFromReq(req *http.Request) (wlhState, error) {
+	var state wlhState
+
+	if err := req.ParseForm(); err != nil {
+		return state, err
+	}
+	log.Printf("%v\n%v\n%v\n", req.Method, req.URL.RawQuery, req.Form)
+
+	for i := 0; i < 10; i++ {
+		name := fmt.Sprintf("t%d", i)
+		if v, ok := req.Form[name]; ok {
+			// boxes should contain only a single character
+			l := v[0]
+			if len(l) > 1 {
+				l = l[:1]
+			}
+			state.Tmpl = append(state.Tmpl, TmplBox{Name: name, Value: l})
+		} else {
+			break
+		}
+	}
+	state.Letters = req.Form.Get("Letters")
+
+	return state, nil
+}
+
 func search(w http.ResponseWriter, req *http.Request) {
-	//fmt.Fprintf(w, "%v\n%v\n", req.Method, req.URL.RawQuery)
+	doReq(w, req, nil)
+}
 
-	w.Header().Add("Access-Control-Allow-Origin", "*")
+func boxRemove(w http.ResponseWriter, req *http.Request) {
+	doReq(w, req, func(s wlhState) wlhState {
+		if len(s.Tmpl) > 3 {
+			s.Tmpl = s.Tmpl[:len(s.Tmpl)-1]
+		}
+		return s
+	})
+}
 
-	query, err := url.ParseQuery(req.URL.RawQuery)
-	if err != nil {
-		log.Print(err)
-		return
+func boxAdd(w http.ResponseWriter, req *http.Request) {
+	doReq(w, req, func(s wlhState) wlhState {
+		if len(s.Tmpl) < 10 {
+			s.Tmpl = append(s.Tmpl, TmplBox{Name: fmt.Sprintf("t%d", len(s.Tmpl))})
+		}
+		return s
+	})
+}
+
+func lettersClear(w http.ResponseWriter, req *http.Request) {
+	doReq(w, req, func(s wlhState) wlhState {
+		s.Letters = ""
+		return s
+	})
+}
+
+func doSearch(state wlhState) wlhState {
+	template := ""
+	letters := strings.ToLower(state.Letters)
+	for _, v := range state.Tmpl {
+		if v.Value == "" {
+			v.Value = " "
+		}
+		template += strings.ToLower(v.Value)
 	}
-
-	if len(query["letters"]) < 1 {
-		log.Print("Invalid letters")
-		return
-	}
-	letters := strings.ToLower(query["letters"][0])
-
-	if len(query["template"]) < 1 {
-		log.Print("Invalid template")
-		return
-	}
-	template := strings.ToLower(query["template"][0])
 
 	if len(letters) < 1 || len(template) < 1 || len(template) > len(letters) {
-		log.Print("Invalid parameters")
-		return
+		log.Println("Invalid parameters")
+		return state
 	}
 
 	start := time.Now()
 
-	// Generate array of characters that are availabe
-	var letterTab [256]int
-	for _, l := range letters {
-		letterTab[l]++
-	}
-
-	json.NewEncoder(w).Encode(findWords(letterTab, wordList, template, letters))
+	state.Results = findWords(wordList, freqList, template, letters)
+	log.Println("Found", len(state.Results), "words")
 
 	log.Printf("Search time: %v\n", time.Now().Sub(start))
+	return state
+}
+
+func doReq(w http.ResponseWriter, req *http.Request, mut func(wlhState) wlhState) {
+	log.Printf("%+v\n", req)
+
+	state, err := stateFromReq(req)
+	if err != nil {
+		log.Println(err)
+	}
+
+	if mut != nil {
+		state = mut(state)
+	}
+	state = doSearch(state)
+
+	err = tmpl.ExecuteTemplate(w, "page.tmpl", state)
+	if err != nil {
+		log.Println(err)
+	}
 }
 
 func serveHTTP(c *cli.Context) error {
+	var state wlhState
+
 	start := time.Now()
-	wordList = slurp(flagListFile)
-	log.Printf("Loaded wordlist in %v", time.Now().Sub(start))
+	wordList = readWordList(flagListFile)
+	freqList = readFreqList(flagFreqFile)
+	log.Printf("Loaded wordlists in %v", time.Now().Sub(start))
+
+	for i := 0; i < 4; i++ {
+		state.Tmpl = append(state.Tmpl, TmplBox{Name: "t" + strconv.Itoa(i)})
+	}
+
+	var err error
+	tmpl, err = template.ParseGlob("templ/*.tmpl")
+	if err != nil {
+		panic(err)
+	}
 
 	h := http.NewServeMux()
-	h.Handle("/", http.FileServer(FileSystem("www/html")))
-	h.Handle("/js/", http.FileServer(FileSystem("www")))
-	h.HandleFunc("/api/search/", search)
+
+	h.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+		err = tmpl.ExecuteTemplate(w, "index.tmpl", state)
+		if err != nil {
+			log.Println(err)
+		}
+	})
+
+	h.HandleFunc("/search/", search)
+	h.HandleFunc("/box/remove/", boxRemove)
+	h.HandleFunc("/box/add/", boxAdd)
+	h.HandleFunc("/letters/clear/", lettersClear)
 
 	log.Printf("Listening on %v", flagHost)
 	log.Fatal(http.ListenAndServe(flagHost, logger(h)))

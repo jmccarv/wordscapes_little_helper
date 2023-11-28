@@ -12,9 +12,11 @@ var flagServeHTTP bool
 var flagLetters string
 var flagTemplate string
 var flagListFile string
+var flagFreqFile string
 var flagHost string
 
 var wordList map[int][]string
+var freqList map[string]int
 
 func main() {
 	//defer profile.Start().Stop()
@@ -71,7 +73,15 @@ AKA a cheat program for the wordscapes game
 			Usage:       "Read wordlist from `FILE`, one word per line",
 			Value:       "/dev/stdin",
 			EnvVar:      "WLH_WORDLIST",
+			Required:    true,
 			Destination: &flagListFile,
+		},
+		cli.StringFlag{
+			Name:        "freqlist, f",
+			Usage:       "Read word frequency list from `FILE`, each line contains a word followed by its frequency",
+			EnvVar:      "WLH_FREQLIST",
+			Required:    true,
+			Destination: &flagFreqFile,
 		},
 	}
 

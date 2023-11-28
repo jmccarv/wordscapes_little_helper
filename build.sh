@@ -15,5 +15,5 @@ cd bin || fatal "Faled to switch to directory 'bin'"
 for cmd in ../cmd/*; do go build $cmd; done
 
 # lazy way to build ts
-cd ../www/js/ || fatal "Failed to switch to directory 'www/js'"
-./build.sh
+#cd ../www/js/ || fatal "Failed to switch to directory 'www/js'"
+#./build.sh

@@ -1,0 +1,62 @@
+<div class="px-1 my-2 container">
+<!--
+<span class="template-count badge badge-secondary"></span>
+-->
+<span class="template">
+{{range .Tmpl}}
+<textarea 
+    name="{{.Name}}"
+    id="{{.Name}}"
+    cols="3"
+    rows="1"
+    maxLength="1"
+    class="mx-1"
+    hx-post="/search/"
+    hx-trigger="keyup changed"
+    hx-target="#page"
+    hx-include="#page"
+>{{.Value}}</textarea>
+{{end}}
+</span>
+</div>
+
+<div class="container px-2 my-2">
+    <button
+        class="btn btn-danger mr-2"
+        hx-post="/box/remove/"
+        hx-target="#page"
+        hx-include="#page"
+    >-</button>
+    <button
+        class="btn btn-primary mr-2"
+        hx-post="/box/add/"
+        hx-target="#page"
+        hx-include="#page"
+    >+</button>
+    <input 
+        id="letters"
+        type="text"
+        name="Letters"
+        class="letters mr-2"
+        maxlength=10
+        size=11
+        hx-post="/search/"
+        hx-trigger="keyup changed delay:250ms"
+        hx-target="#page"
+        hx-include="#page"
+        value="{{.Letters}}">
+    <button
+        class="btn btn-secondary ml-4"
+        hx-post="/letters/clear/"
+        hx-target="#page"
+        hx-include="#page"
+    >X</button>
+</div>
+
+<div class="container">
+    <div class="results row justify-content-start">
+    {{range .Results}}
+    <div class="col">{{.}}</div>
+    {{end}}
+    </div>
+</div>
