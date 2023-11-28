@@ -41,13 +41,13 @@
         maxlength=10
         size=11
         hx-post="search/"
-        hx-trigger="keyup changed delay:250ms"
+        hx-trigger="keyup changed delay:500ms"
         hx-target="#page"
         hx-include="#page"
         value="{{.Letters}}">
     <button
         class="btn btn-secondary ml-4"
-        hx-post="letters/clear/"
+        hx-post="clear/"
         hx-target="#page"
         hx-include="#page"
     >X</button>

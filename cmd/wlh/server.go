@@ -79,9 +79,12 @@ func boxAdd(w http.ResponseWriter, req *http.Request) {
 	})
 }
 
-func lettersClear(w http.ResponseWriter, req *http.Request) {
+func clear(w http.ResponseWriter, req *http.Request) {
 	doReq(w, req, func(s wlhState) wlhState {
 		s.Letters = ""
+		for i := range s.Tmpl {
+			s.Tmpl[i].Value = ""
+		}
 		return s
 	})
 }
@@ -159,7 +162,7 @@ func serveHTTP(c *cli.Context) error {
 	h.HandleFunc("/search/", search)
 	h.HandleFunc("/box/remove/", boxRemove)
 	h.HandleFunc("/box/add/", boxAdd)
-	h.HandleFunc("/letters/clear/", lettersClear)
+	h.HandleFunc("/clear/", clear)
 
 	log.Printf("Listening on %v", flagHost)
 	log.Fatal(http.ListenAndServe(flagHost, logger(h)))
