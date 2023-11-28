@@ -11,7 +11,7 @@
     rows="1"
     maxLength="1"
     class="mx-1"
-    hx-post="/search/"
+    hx-post="search/"
     hx-trigger="keyup changed"
     hx-target="#page"
     hx-include="#page"
@@ -23,13 +23,13 @@
 <div class="container px-2 my-2">
     <button
         class="btn btn-danger mr-2"
-        hx-post="/box/remove/"
+        hx-post="box/remove/"
         hx-target="#page"
         hx-include="#page"
     >-</button>
     <button
         class="btn btn-primary mr-2"
-        hx-post="/box/add/"
+        hx-post="box/add/"
         hx-target="#page"
         hx-include="#page"
     >+</button>
@@ -40,14 +40,14 @@
         class="letters mr-2"
         maxlength=10
         size=11
-        hx-post="/search/"
+        hx-post="search/"
         hx-trigger="keyup changed delay:250ms"
         hx-target="#page"
         hx-include="#page"
         value="{{.Letters}}">
     <button
         class="btn btn-secondary ml-4"
-        hx-post="/letters/clear/"
+        hx-post="letters/clear/"
         hx-target="#page"
         hx-include="#page"
     >X</button>
