@@ -58,11 +58,11 @@ func stateFromReq(req *http.Request) (wlhState, error) {
 }
 
 func search(w http.ResponseWriter, req *http.Request) {
-	doReq(w, req, nil)
+	doReq(w, req, tmpl.Lookup("results.tmpl"), nil)
 }
 
 func boxRemove(w http.ResponseWriter, req *http.Request) {
-	doReq(w, req, func(s wlhState) wlhState {
+	doReq(w, req, nil, func(s wlhState) wlhState {
 		if len(s.Tmpl) > 3 {
 			s.Tmpl = s.Tmpl[:len(s.Tmpl)-1]
 		}
@@ -71,7 +71,7 @@ func boxRemove(w http.ResponseWriter, req *http.Request) {
 }
 
 func boxAdd(w http.ResponseWriter, req *http.Request) {
-	doReq(w, req, func(s wlhState) wlhState {
+	doReq(w, req, nil, func(s wlhState) wlhState {
 		if len(s.Tmpl) < 10 {
 			s.Tmpl = append(s.Tmpl, TmplBox{Name: fmt.Sprintf("t%d", len(s.Tmpl))})
 		}
@@ -80,7 +80,7 @@ func boxAdd(w http.ResponseWriter, req *http.Request) {
 }
 
 func clear(w http.ResponseWriter, req *http.Request) {
-	doReq(w, req, func(s wlhState) wlhState {
+	doReq(w, req, nil, func(s wlhState) wlhState {
 		s.Letters = ""
 		for i := range s.Tmpl {
 			s.Tmpl[i].Value = ""
@@ -113,7 +113,7 @@ func doSearch(state wlhState) wlhState {
 	return state
 }
 
-func doReq(w http.ResponseWriter, req *http.Request, mut func(wlhState) wlhState) {
+func doReq(w http.ResponseWriter, req *http.Request, t *template.Template, mut func(wlhState) wlhState) {
 	//log.Printf("%+v\n", req)
 
 	state, err := stateFromReq(req)
@@ -126,7 +126,10 @@ func doReq(w http.ResponseWriter, req *http.Request, mut func(wlhState) wlhState
 	}
 	state = doSearch(state)
 
-	err = tmpl.ExecuteTemplate(w, "page.tmpl", state)
+	if t == nil {
+		t = tmpl.Lookup("page.tmpl")
+	}
+	err = t.Execute(w, state)
 	if err != nil {
 		log.Println(err)
 	}
