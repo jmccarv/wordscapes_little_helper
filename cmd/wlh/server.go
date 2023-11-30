@@ -174,7 +174,5 @@ func serveHTTP(c *cli.Context) error {
 	h.HandleFunc("/clear/", clear)
 
 	log.Printf("Listening on %v", flagHost)
-	log.Fatal(http.ListenAndServe(flagHost, logger(h)))
-
-	return nil
+	return http.ListenAndServe(flagHost, logger(h))
 }
