@@ -15,8 +15,8 @@ func oneshotSearch(c *cli.Context) error {
 
 	start := time.Now()
 	wordList = readWordList(flagListFile)
-	log.Printf("Loaded wordlist in %v", time.Now().Sub(start))
 	freqList = readFreqList(flagFreqFile)
+	log.Printf("Loaded wordlists in %v", time.Now().Sub(start))
 
 	template := flagTemplate
 	letters := flagLetters
