@@ -39,11 +39,11 @@ https://dumps.wikimedia.org/enwiktionary/latest/enwiktionary-latest-pages-articl
 
 Use go get - ignore error: no Go files in ...
 
-    go get bitbucket.org/jmccarv/wordscapes_little_helper
+    go get gitlab.parasite.cc/slam/wordscapes_little_helper
 
 Or clone the git repo:
 
-    git clone https://bitbucket.org/jmccarv/wordscapes_little_helper
+    git clone https://gitlab.parasite.cc/slam/wordscapes_little_helper
 
 # BUILDING
 
@@ -63,13 +63,13 @@ Help is available for both commands via --help or -h.
 
 ## Run a oneshot search from the command line
 
-    bin/wlh -w wordlist find --template .i.. --letters dibnre
+    bin/wlh -w wordlist -f freqlist find --template .i.. --letters dibnre
 
 ## Web Server
 
 Start the web server:
 
-    bin/wlh -w wordlist serve
+    bin/wlh -w wordlist -f freqlist serve
 
 Connect to the app:
 
@@ -79,7 +79,7 @@ Connect to the app:
 
 The git repository for this application may be found here:
 
-    https://github.com/jmccarv/wordscapes_little_helper
+    https://gitlab.parasite.cc/slam/wordscapes_little_helper
 
 # AUTHOR
 
