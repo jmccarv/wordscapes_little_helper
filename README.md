@@ -63,13 +63,13 @@ Help is available for both commands via --help or -h.
 
 ## Run a oneshot search from the command line
 
-    bin/wlh -w wordlist -f freqlist find --template .i.. --letters dibnre
+    bin/wlh -w data/wordlist -f data/freqc.txt find --template .i.. --letters dibnre
 
 ## Web Server
 
 Start the web server:
 
-    bin/wlh -w wordlist -f freqlist serve
+    bin/wlh -w wordlist -f data/freqc.txt serve
 
 Connect to the app:
 
