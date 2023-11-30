@@ -9,7 +9,7 @@ Type=exec
 # wlh expects to be started from the root of the project
 WorkingDirectory=/site/local/wordscapes_little_helper
 
-ExecStart=/site/local/wordscapes_little_helper/bin/wlh -w data/wordlist serve -l localhost:8765
+ExecStart=/site/local/wordscapes_little_helper/bin/wlh -w data/wordlist -f data/freqc.txt serve -l localhost:8765
 PIDFile=/site/local/var/run/wlh.pid
 
 [Install]
