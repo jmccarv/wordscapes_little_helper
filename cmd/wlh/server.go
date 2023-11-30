@@ -154,7 +154,7 @@ func serveHTTP(c *cli.Context) error {
 	}
 
 	var err error
-	tmpl, err = template.ParseGlob("templ/*.tmpl")
+	tmpl, err = template.ParseGlob("tmpl/*.tmpl")
 	if err != nil {
 		panic(err)
 	}
