@@ -66,12 +66,18 @@ func boxRemove(w http.ResponseWriter, req *http.Request) {
 		if len(s.Tmpl) > 3 {
 			s.Tmpl = s.Tmpl[:len(s.Tmpl)-1]
 		}
+		for i := range s.Tmpl {
+			s.Tmpl[i].Value = ""
+		}
 		return s
 	})
 }
 
 func boxAdd(w http.ResponseWriter, req *http.Request) {
 	doReq(w, req, nil, func(s wlhState) wlhState {
+		for i := range s.Tmpl {
+			s.Tmpl[i].Value = ""
+		}
 		if len(s.Tmpl) < 10 {
 			s.Tmpl = append(s.Tmpl, TmplBox{Name: fmt.Sprintf("t%d", len(s.Tmpl))})
 		}
